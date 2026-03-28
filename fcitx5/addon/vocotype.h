@@ -98,9 +98,8 @@ private:
     int recorder_stdin_fd_ = -1;
     FILE* recorder_stdout_ = nullptr;
 
-    // Python 脚本路径（安装时配置）
-    std::string python_venv_path_;
-    std::string recorder_script_path_;
+    // 录音启动器路径（安装时配置）
+    std::string recorder_launcher_path_;
 };
 
 } // namespace vocotype

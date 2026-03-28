@@ -66,8 +66,7 @@ VoCoTypeAddon::VoCoTypeAddon(fcitx::Instance* instance)
     // 获取安装路径
     const char* home = std::getenv("HOME");
     if (home) {
-        python_venv_path_ = std::string(home) + "/.local/share/vocotype-fcitx5/.venv/bin/python";
-        recorder_script_path_ = std::string(home) + "/.local/share/vocotype-fcitx5/backend/audio_recorder.py";
+        recorder_launcher_path_ = std::string(home) + "/.local/bin/vocotype-fcitx5-recorder";
     } else {
         FCITX_ERROR() << "HOME environment variable not set";
     }
@@ -216,7 +215,7 @@ void VoCoTypeAddon::startRecording(fcitx::InputContext* ic, bool long_mode) {
         return;
     }
 
-    if (python_venv_path_.empty() || recorder_script_path_.empty()) {
+    if (recorder_launcher_path_.empty()) {
         showError(ic, "录音配置无效");
         return;
     }
@@ -253,9 +252,8 @@ void VoCoTypeAddon::startRecording(fcitx::InputContext* ic, bool long_mode) {
         close(stdout_pipe[0]);
         close(stdout_pipe[1]);
 
-        execl(python_venv_path_.c_str(),
-              python_venv_path_.c_str(),
-              recorder_script_path_.c_str(),
+          execl(recorder_launcher_path_.c_str(),
+              recorder_launcher_path_.c_str(),
               static_cast<char*>(nullptr));
         _exit(127);
     }
