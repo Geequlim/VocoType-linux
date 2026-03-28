@@ -22,8 +22,20 @@ from pathlib import Path
 import numpy as np
 import sounddevice as sd
 
-# 添加项目根目录到 path
-PROJECT_ROOT = Path(__file__).parent.parent.parent
+# 添加项目根目录到 path，同时兼容仓库布局与安装后布局
+def discover_project_root() -> Path:
+    current = Path(__file__).resolve()
+    candidates = [
+        current.parent.parent,
+        current.parent.parent.parent,
+    ]
+    for candidate in candidates:
+        if (candidate / "app").is_dir():
+            return candidate
+    return current.parent.parent
+
+
+PROJECT_ROOT = discover_project_root()
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from app.audio_utils import load_audio_config, resample_audio, SAMPLE_RATE

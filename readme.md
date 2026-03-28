@@ -70,6 +70,8 @@ fcitx5 -r
   - 本地模型（`local_ephemeral`）：按下预热，润色后释放
   - 远程 API（`remote`）：交互配置 `model`、`endpoint`、`api_key`
 
+安装脚本还会询问 Python 环境：项目虚拟环境、用户级虚拟环境、系统 Python 或手动指定解释器。若安装后希望删除当前仓库，请选择用户级虚拟环境或系统 Python。
+
 详细安装说明：[fcitx5/README.md](fcitx5/README.md)
 
 ---

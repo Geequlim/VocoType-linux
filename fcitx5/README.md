@@ -58,7 +58,7 @@ bash fcitx5/scripts/install-fcitx5.sh
 1. 检查 Fcitx 5 和编译依赖
 2. 编译 C++ Addon
 3. 安装 Python 后端
-4. 配置 Python 虚拟环境（支持手动指定 conda 解释器）
+4. 配置 Python 环境（项目虚拟环境、用户级虚拟环境、系统 Python 或手动指定解释器）
 5. 配置音频设备（可选）
 6. 创建 systemd 服务
 
@@ -94,22 +94,24 @@ cp fcitx5/data/vocotype.conf.in ~/.local/share/fcitx5/inputmethod/
 ```bash
 INSTALL_DIR=$HOME/.local/share/vocotype-fcitx5
 mkdir -p "$INSTALL_DIR"
+mkdir -p "$INSTALL_DIR/scripts"
 cp -r app "$INSTALL_DIR/"
 cp -r fcitx5/backend "$INSTALL_DIR/"
 cp vocotype_version.py "$INSTALL_DIR/"
+cp scripts/setup-audio.py "$INSTALL_DIR/scripts/"
 
 # 创建虚拟环境
 python3 -m venv "$INSTALL_DIR/.venv"
 "$INSTALL_DIR/.venv/bin/pip" install -r requirements.txt
 
-# 安装完整版（含 pyrime）
-"$INSTALL_DIR/.venv/bin/pip" install -e ".[full]"
+# 安装 Rime 依赖
+"$INSTALL_DIR/.venv/bin/pip" install pyrime
 ```
 
 #### 4. 配置音频
 
 ```bash
-"$INSTALL_DIR/.venv/bin/python" scripts/setup-audio.py
+"$INSTALL_DIR/.venv/bin/python" "$INSTALL_DIR/scripts/setup-audio.py"
 ```
 
 ## 使用方法
@@ -301,7 +303,7 @@ VoCoType Fcitx 5 版本使用**独立的 Rime 配置目录**：
 
 3. 重新配置音频设备：
    ```bash
-   ~/.local/share/vocotype-fcitx5/.venv/bin/python scripts/setup-audio.py
+   ~/.local/share/vocotype-fcitx5/.venv/bin/python   ~/.local/share/vocotype-fcitx5/scripts/setup-audio.py
    ```
 
 ### Rime 拼音不可用
@@ -314,10 +316,9 @@ VoCoType Fcitx 5 版本使用**独立的 Rime 配置目录**：
    ~/.local/share/vocotype-fcitx5/.venv/bin/python -c "import pyrime"
    ```
 
-2. 如果未安装，重新安装完整版：
+2. 如果未安装，补装 pyrime：
    ```bash
-   cd vocotype-cli
-   ~/.local/share/vocotype-fcitx5/.venv/bin/pip install -e ".[full]"
+  ~/.local/share/vocotype-fcitx5/.venv/bin/pip install pyrime
    ```
 
 3. 检查 Rime 数据目录：
