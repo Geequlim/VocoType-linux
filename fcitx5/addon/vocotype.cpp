@@ -421,6 +421,105 @@ bool VoCoTypeAddon::handlePendingFallbackKey(fcitx::InputContext* ic,
     return false;
 }
 
+bool VoCoTypeAddon::isBareShiftToggleKey(fcitx::KeySym keyval,
+                                         fcitx::KeyStates states) const {
+    if (keyval != FcitxKey_Shift_L && keyval != FcitxKey_Shift_R) {
+        return false;
+    }
+
+    const bool has_other_modifiers =
+        (states & fcitx::KeyState::Ctrl) ||
+        (states & fcitx::KeyState::Alt) ||
+        (states & fcitx::KeyState::Super) ||
+        (states & fcitx::KeyState::Super2) ||
+        (states & fcitx::KeyState::Hyper) ||
+        (states & fcitx::KeyState::Hyper2) ||
+        (states & fcitx::KeyState::Meta);
+    return !has_other_modifiers;
+}
+
+void VoCoTypeAddon::cancelShiftToggle() {
+    shift_toggle_armed_ = false;
+    pending_shift_toggle_key_ = static_cast<fcitx::KeySym>(0);
+}
+
+void VoCoTypeAddon::updateRawCompositionBuffer(fcitx::KeySym keyval,
+                                               fcitx::KeyStates states,
+                                               bool is_release) {
+    if (is_release) {
+        return;
+    }
+
+    const bool has_blocking_modifiers =
+        (states & fcitx::KeyState::Ctrl) ||
+        (states & fcitx::KeyState::Alt) ||
+        (states & fcitx::KeyState::Super) ||
+        (states & fcitx::KeyState::Super2) ||
+        (states & fcitx::KeyState::Hyper) ||
+        (states & fcitx::KeyState::Hyper2) ||
+        (states & fcitx::KeyState::Meta);
+    if (has_blocking_modifiers) {
+        return;
+    }
+
+    if (keyval == FcitxKey_BackSpace) {
+        if (!raw_composition_buffer_.empty()) {
+            raw_composition_buffer_.pop_back();
+        }
+        return;
+    }
+
+    if (keyval == FcitxKey_Escape) {
+        clearRawCompositionBuffer();
+        return;
+    }
+
+    std::string text = fcitx::Key::keySymToUTF8(keyval);
+    if (text.size() != 1) {
+        return;
+    }
+
+    unsigned char ch = static_cast<unsigned char>(text[0]);
+    if (std::isalnum(ch) || ch == '\'' || ch == ';') {
+        raw_composition_buffer_.push_back(static_cast<char>(std::tolower(ch)));
+    }
+}
+
+void VoCoTypeAddon::clearRawCompositionBuffer() {
+    raw_composition_buffer_.clear();
+}
+
+void VoCoTypeAddon::showModeIndicator(fcitx::InputContext* ic,
+                                      const std::string& indicator) {
+    mode_indicator_timer_.reset();
+    auto& inputPanel = ic->inputPanel();
+    fcitx::Text indicator_text;
+    indicator_text.append(indicator);
+    inputPanel.setAuxUp(indicator_text);
+    inputPanel.setAuxDown(fcitx::Text());
+    ic->updateUserInterface(fcitx::UserInterfaceComponent::InputPanel);
+
+    auto ic_ref =
+        ic ? ic->watch() : fcitx::TrackableObjectReference<fcitx::InputContext>();
+    mode_indicator_timer_ = instance_->eventLoop().addTimeEvent(
+        CLOCK_MONOTONIC,
+        fcitx::now(CLOCK_MONOTONIC) + 800000,
+        0,
+        [this, ic_ref](fcitx::EventSourceTime*, uint64_t) {
+            mode_indicator_timer_.reset();
+            auto* ic_ptr = ic_ref.get();
+            if (!ic_ptr) {
+                return false;
+            }
+            auto& panel = ic_ptr->inputPanel();
+            panel.setAuxUp(fcitx::Text());
+            panel.setAuxDown(fcitx::Text());
+            ic_ptr->updateUserInterface(fcitx::UserInterfaceComponent::InputPanel);
+            return false;
+        });
+    mode_indicator_timer_->setOneShot();
+}
+
 void VoCoTypeAddon::replayShortTapAsRegularKey(fcitx::InputContext* ic) {
     const auto states = pending_ptt_states_;
     cancelPendingRecordingStart();
@@ -553,6 +652,34 @@ void VoCoTypeAddon::keyEvent(const fcitx::InputMethodEntry& entry,
                   << ", release=" << is_release
                   << ", ptt_key=" << ptt_key_name_;
 
+    if (!is_release && shift_toggle_armed_ && keyval != pending_shift_toggle_key_) {
+        cancelShiftToggle();
+    }
+
+    if (shift_toggle_armed_ && is_release && keyval == pending_shift_toggle_key_) {
+        cancelShiftToggle();
+
+        if (!ascii_mode_ && !raw_composition_buffer_.empty()) {
+            commitText(ic, raw_composition_buffer_);
+        }
+
+        ipc_client_->reset();
+        ascii_mode_ = !ascii_mode_;
+        clearUI(ic);
+        showModeIndicator(ic, ascii_mode_ ? "A" : "中");
+        keyEvent.filterAndAccept();
+        return;
+    }
+
+    if (isBareShiftToggleKey(keyval, key.states())) {
+        if (!is_release) {
+            shift_toggle_armed_ = true;
+            pending_shift_toggle_key_ = keyval;
+            keyEvent.filterAndAccept();
+            return;
+        }
+    }
+
     if (handlePendingFallbackKey(ic, keyval, key.states(), is_release)) {
         keyEvent.filterAndAccept();
         return;
@@ -585,6 +712,12 @@ void VoCoTypeAddon::keyEvent(const fcitx::InputMethodEntry& entry,
         return;
     }
 
+    if (ascii_mode_) {
+        return;
+    }
+
+    updateRawCompositionBuffer(keyval, key.states(), is_release);
+
     // 其他键：转发给 Rime
     if (!is_release) {
         if (forwardKeyToRime(ic, keyval, key.states())) {
@@ -599,6 +732,7 @@ void VoCoTypeAddon::reset(const fcitx::InputMethodEntry& entry,
     auto ic = event.inputContext();
     cancelPendingRecordingStart();
     cancelPendingRecordingStop();
+    cancelShiftToggle();
     clearUI(ic);
     ipc_client_->reset();
 }
@@ -613,6 +747,7 @@ void VoCoTypeAddon::deactivate(const fcitx::InputMethodEntry& entry,
     auto ic = event.inputContext();
     cancelPendingRecordingStart();
     cancelPendingRecordingStop();
+    cancelShiftToggle();
     clearUI(ic);
 
     // 如果正在录音，停止录音但不转录
@@ -799,6 +934,7 @@ void VoCoTypeAddon::stopRecording(fcitx::InputContext* ic, bool transcribe) {
 void VoCoTypeAddon::updateUI(fcitx::InputContext* ic, const RimeUIState& state) {
     stopRecordingAnimation();
     pending_fallback_text_.clear();
+    mode_indicator_timer_.reset();
     auto& inputPanel = ic->inputPanel();
     inputPanel.setClientPreedit(fcitx::Text());
     inputPanel.setAuxUp(fcitx::Text());
@@ -856,6 +992,8 @@ void VoCoTypeAddon::updateUI(fcitx::InputContext* ic, const RimeUIState& state) 
 void VoCoTypeAddon::clearUI(fcitx::InputContext* ic) {
     stopRecordingAnimation();
     pending_fallback_text_.clear();
+    mode_indicator_timer_.reset();
+    clearRawCompositionBuffer();
     auto& inputPanel = ic->inputPanel();
     inputPanel.reset();
     inputPanel.setClientPreedit(fcitx::Text());
@@ -934,6 +1072,7 @@ void VoCoTypeAddon::commitText(fcitx::InputContext* ic, const std::string& text)
     const std::string commit_text = strip_trailing_period_on_commit_
                                         ? stripTrailingCommitPeriod(text)
                                         : text;
+    clearRawCompositionBuffer();
     const uint64_t now = fcitx::now(CLOCK_MONOTONIC);
     const std::string current_program = ic->program();
     const std::string current_frontend(ic->frontendName());

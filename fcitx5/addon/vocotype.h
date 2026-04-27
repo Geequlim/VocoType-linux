@@ -103,6 +103,12 @@ private:
                           fcitx::KeyStates states);
     bool handlePendingFallbackKey(fcitx::InputContext* ic, fcitx::KeySym keyval,
                                   fcitx::KeyStates states, bool is_release);
+    bool isBareShiftToggleKey(fcitx::KeySym keyval, fcitx::KeyStates states) const;
+    void cancelShiftToggle();
+    void updateRawCompositionBuffer(fcitx::KeySym keyval, fcitx::KeyStates states,
+                                    bool is_release);
+    void clearRawCompositionBuffer();
+    void showModeIndicator(fcitx::InputContext* ic, const std::string& indicator);
     void replayShortTapAsRegularKey(fcitx::InputContext* ic);
     void showPanelMessage(fcitx::InputContext* ic, const std::string& message);
     void startPanelAnimation(fcitx::InputContext* ic, PanelAnimationKind kind);
@@ -178,8 +184,13 @@ private:
     std::unique_ptr<fcitx::EventSourceTime> ptt_hold_timer_;
     std::unique_ptr<fcitx::EventSourceTime> ptt_release_timer_;
     std::unique_ptr<fcitx::EventSourceTime> recording_animation_timer_;
+    std::unique_ptr<fcitx::EventSourceTime> mode_indicator_timer_;
     size_t recording_animation_frame_index_ = 0;
     PanelAnimationKind panel_animation_kind_ = PanelAnimationKind::None;
+    bool ascii_mode_ = false;
+    bool shift_toggle_armed_ = false;
+    fcitx::KeySym pending_shift_toggle_key_ = static_cast<fcitx::KeySym>(0);
+    std::string raw_composition_buffer_;
     std::string pending_fallback_text_;
     fcitx::InputContext* last_committed_ic_ = nullptr;
     std::string last_committed_program_;
