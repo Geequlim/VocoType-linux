@@ -48,6 +48,17 @@ constexpr std::array<const char *, 8> RECORDING_ANIMATION_FRAMES = {
     "⚫ 正在听  ●    ",
 };
 
+constexpr std::array<const char *, 8> LONG_RECORDING_ANIMATION_FRAMES = {
+    "✨ 正在听·将润色 ●     ",
+    "✨ 正在听·将润色  ●    ",
+    "✨ 正在听·将润色   ●   ",
+    "✨ 正在听·将润色    ●  ",
+    "✨ 正在听·将润色     ● ",
+    "✨ 正在听·将润色    ●  ",
+    "✨ 正在听·将润色   ●   ",
+    "✨ 正在听·将润色  ●    ",
+};
+
 constexpr std::array<const char *, 8> POLISHING_ANIMATION_FRAMES = {
     "✨ 正在润色 ●     ",
     "✨ 正在润色  ●    ",
@@ -565,7 +576,9 @@ void VoCoTypeAddon::showPanelMessage(fcitx::InputContext* ic, const std::string&
 
 void VoCoTypeAddon::showAnimationFrame(fcitx::InputContext* ic) {
     const auto *frames = &RECORDING_ANIMATION_FRAMES;
-    if (panel_animation_kind_ == PanelAnimationKind::Polishing) {
+    if (panel_animation_kind_ == PanelAnimationKind::RecordingLong) {
+        frames = &LONG_RECORDING_ANIMATION_FRAMES;
+    } else if (panel_animation_kind_ == PanelAnimationKind::Polishing) {
         frames = &POLISHING_ANIMATION_FRAMES;
     }
 
@@ -623,6 +636,10 @@ void VoCoTypeAddon::startRecordingAnimation(fcitx::InputContext* ic) {
     startPanelAnimation(ic, PanelAnimationKind::Recording);
 }
 
+void VoCoTypeAddon::startLongRecordingAnimation(fcitx::InputContext* ic) {
+    startPanelAnimation(ic, PanelAnimationKind::RecordingLong);
+}
+
 void VoCoTypeAddon::startPolishingAnimation(fcitx::InputContext* ic) {
     startPanelAnimation(ic, PanelAnimationKind::Polishing);
 }
@@ -651,6 +668,42 @@ void VoCoTypeAddon::keyEvent(const fcitx::InputMethodEntry& entry,
     FCITX_DEBUG() << "Key event: keyval=" << keyval
                   << ", release=" << is_release
                   << ", ptt_key=" << ptt_key_name_;
+
+    const auto modifier_state = fcitx::Key::keySymToStates(keyval);
+    const bool is_long_mode_modifier_key =
+        modifier_state != fcitx::KeyState::NoState &&
+        modifier_state == long_mode_modifier_;
+
+    if (is_long_mode_modifier_key && (is_recording_ || ptt_pressed_)) {
+        cancelShiftToggle();
+
+        if (!is_release) {
+            if (is_recording_) {
+                recording_long_mode_ = !recording_long_mode_;
+                if (recording_long_mode_) {
+                    startLongRecordingAnimation(ic);
+                    std::thread([this]() {
+                        (void)ipc_client_->prewarmSlm();
+                    }).detach();
+                    FCITX_INFO() << "Recording toggled to long mode via modifier key";
+                } else {
+                    startRecordingAnimation(ic);
+                    std::thread([this]() {
+                        (void)ipc_client_->releaseSlm();
+                    }).detach();
+                    FCITX_INFO() << "Recording toggled to normal mode via modifier key";
+                }
+            } else {
+                pending_long_mode_ = !pending_long_mode_;
+                FCITX_INFO() << "Pending recording toggled to "
+                             << (pending_long_mode_ ? "long" : "normal")
+                             << " mode via modifier key";
+            }
+        }
+
+        keyEvent.filterAndAccept();
+        return;
+    }
 
     if (!is_release && shift_toggle_armed_ && keyval != pending_shift_toggle_key_) {
         cancelShiftToggle();
@@ -837,7 +890,11 @@ void VoCoTypeAddon::startRecording(fcitx::InputContext* ic, bool long_mode) {
         }).detach();
     }
 
-    startRecordingAnimation(ic);
+    if (long_mode) {
+        startLongRecordingAnimation(ic);
+    } else {
+        startRecordingAnimation(ic);
+    }
 
     FCITX_INFO() << "Recording started, mode=" << (long_mode ? "long" : "normal");
 }
