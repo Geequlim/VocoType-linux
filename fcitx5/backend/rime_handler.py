@@ -185,14 +185,10 @@ class RimeHandler:
                 distribution_version = install_meta.get("distribution_version") or "1.0"
                 app_name = "rime.fcitx5" if distribution_code == "fcitx-rime" else "rime.vocotype.fcitx5"
 
-                # 注意：pyrime 编译版本中 user_data_dir 和 log_dir 字段位置与 .pyi 存根相反。
-                # 实测：传入 user_data_dir 的值被 librime 用作 log_dir，
-                #       传入 log_dir 的值被 librime 用作 user_data_dir（读取 schema/build）。
-                # 因此这里交换两个字段，使 librime 能正确读取用户配置目录中的 schema 和 build。
                 traits = Traits(
                     shared_data_dir=str(shared_data_dir),
-                    user_data_dir=str(log_dir),      # pyrime bug: 此值实为 librime log_dir
-                    log_dir=str(user_data_dir),       # pyrime bug: 此值实为 librime user_data_dir
+                    user_data_dir=str(user_data_dir),
+                    log_dir=str(log_dir),
                     distribution_name=distribution_name,
                     distribution_code_name=distribution_code,
                     distribution_version=distribution_version,
@@ -316,6 +312,18 @@ class RimeHandler:
             # 获取上下文
             context = self.session.get_context()
             if context:
+                composition = getattr(context, "composition", None)
+                preedit_text = (
+                    composition.preedit
+                    if composition and getattr(composition, "preedit", None)
+                    else ""
+                )
+                if preedit_text:
+                    result["preedit"] = {
+                        "text": preedit_text,
+                        "cursor_pos": getattr(composition, "cursor_pos", len(preedit_text)),
+                    }
+
                 # 候选词
                 menu = getattr(context, "menu", None)
                 candidates = getattr(menu, "candidates", None) or []

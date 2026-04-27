@@ -808,8 +808,10 @@ void VoCoTypeAddon::updateUI(fcitx::InputContext* ic, const RimeUIState& state) 
     if (!state.preedit_text.empty()) {
         fcitx::Text preedit;
         preedit.append(state.preedit_text, fcitx::TextFormatFlag::Underline);
-        inputPanel.setPreedit(preedit);
+        inputPanel.setClientPreedit(preedit);
+        inputPanel.setPreedit(fcitx::Text());
     } else {
+        inputPanel.setClientPreedit(fcitx::Text());
         inputPanel.setPreedit(fcitx::Text());
     }
 
@@ -830,12 +832,9 @@ void VoCoTypeAddon::updateUI(fcitx::InputContext* ic, const RimeUIState& state) 
 
         for (size_t i = 0; i < state.candidates.size(); ++i) {
             const auto& [text, comment] = state.candidates[i];
+            FCITX_UNUSED(comment);
             fcitx::Text candidate_text;
             candidate_text.append(text);
-            if (!comment.empty()) {
-                candidate_text.append(" ");
-                candidate_text.append(comment);
-            }
             candidateList->append<fcitx::DisplayOnlyCandidateWord>(candidate_text);
         }
 
