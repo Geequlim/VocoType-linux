@@ -148,7 +148,8 @@ private:
     /**
      * 提交文本
      */
-    void commitText(fcitx::InputContext* ic, const std::string& text);
+    void commitText(fcitx::InputContext* ic, const std::string& text,
+                    bool strip_trailing_period = false);
 
     /**
      * 显示错误信息

@@ -974,7 +974,7 @@ void VoCoTypeAddon::stopRecording(fcitx::InputContext* ic, bool transcribe) {
                     return;
                 }
                 if (result.success && !result.text.empty()) {
-                    commitText(ic_ptr, result.text);
+                    commitText(ic_ptr, result.text, strip_trailing_period_on_commit_);
                 } else if (!result.success) {
                     showError(ic_ptr,
                               result.error.empty() ? "转录失败" : result.error,
@@ -1125,8 +1125,9 @@ bool VoCoTypeAddon::pasteTextForClient(fcitx::InputContext* ic, const std::strin
     return true;
 }
 
-void VoCoTypeAddon::commitText(fcitx::InputContext* ic, const std::string& text) {
-    const std::string commit_text = strip_trailing_period_on_commit_
+void VoCoTypeAddon::commitText(fcitx::InputContext* ic, const std::string& text,
+                               bool strip_trailing_period) {
+    const std::string commit_text = strip_trailing_period
                                         ? stripTrailingCommitPeriod(text)
                                         : text;
     clearRawCompositionBuffer();
