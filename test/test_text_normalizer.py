@@ -127,6 +127,18 @@ def test_normalize_digit_sequence_contexts_and_aliases():
         assert_normalized(input_text, expected)
 
 
+def test_normalize_standalone_numbers_with_sentence_punctuation():
+    cases = {
+        "幺五零二五零二二四三三。": "15025022433。",
+        "三百八。": "380。",
+        "四千二百六。": "4260。",
+        "八十三，": "83，",
+        "一百六十二？": "162？",
+    }
+    for input_text, expected in cases.items():
+        assert_normalized(input_text, expected)
+
+
 def test_preserve_approximate_phrases():
     assert_normalized("七八个三五成群十五六岁", "七八个三五成群十五六岁")
 

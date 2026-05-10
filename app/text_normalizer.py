@@ -245,6 +245,8 @@ _DURATION_HALF_SUFFIXES = ("分半",)
 _CONTEXT_PREFIX_CHARS = set("到至和或比乘除加减约近超共用隔差")
 _CONTEXT_SUFFIX_CHARS = set("到至和或比乘除加减多余前后")
 _CONTEXT_SEPARATOR_CHARS = " \t\r\n:：#-—_,，是为"
+_STANDALONE_PREFIX_BOUNDARY_CHARS = " \t\r\n([{\"'“‘（【《「『"
+_STANDALONE_SUFFIX_BOUNDARY_CHARS = " \t\r\n.,!?;:，。！？；：、)}\"'”’）】》」』…"
 _FIXED_NON_NUMERIC_PHRASES = _load_fixed_non_numeric_phrases()
 
 
@@ -416,7 +418,7 @@ def _should_convert_digit_sequence(body: str, *, prev_text: str, next_text: str)
         return True
     if _has_numeric_prefix_context(prev_text):
         return True
-    if len(body) >= 3 and not prev_text and not next_text:
+    if len(body) >= 3 and _has_standalone_numeric_context(prev_text=prev_text, next_text=next_text):
         return True
     if len(body) >= 3 and next_text.startswith(("共", "一共")):
         return True
@@ -469,11 +471,22 @@ def _has_large_unit_shorthand_tail(body: str) -> bool:
 
 def _is_standalone_structured_number(body: str, *, prev_text: str, next_text: str) -> bool:
     return (
-        not prev_text
-        and not next_text
+        _has_standalone_numeric_context(prev_text=prev_text, next_text=next_text)
         and _contains_unit(body)
         and not _looks_like_approximate_phrase(body, next_text)
     )
+
+
+def _has_standalone_numeric_context(*, prev_text: str, next_text: str) -> bool:
+    return _has_standalone_prefix_boundary(prev_text) and _has_standalone_suffix_boundary(next_text)
+
+
+def _has_standalone_prefix_boundary(prev_text: str) -> bool:
+    return all(ch in _STANDALONE_PREFIX_BOUNDARY_CHARS for ch in prev_text)
+
+
+def _has_standalone_suffix_boundary(next_text: str) -> bool:
+    return all(ch in _STANDALONE_SUFFIX_BOUNDARY_CHARS for ch in next_text)
 
 
 def _looks_like_fixed_phrase(*, body: str, prev_text: str, next_text: str) -> bool:
