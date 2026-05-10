@@ -9,6 +9,7 @@ soundfile==0.13.1
 # 语音识别核心
 funasr_onnx==0.4.1
 jieba==0.42.1
+PyYAML>=6.0.0
 
 # IBus Python 绑定 (Linux 必需)
 # PyGObject 3.42 在 Python 3.12 上会导致 gi.repository 动态导入失效

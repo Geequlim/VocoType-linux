@@ -186,6 +186,22 @@ with open(target, "w", encoding="utf-8") as f:
 PY
 }
 
+ensure_user_dictionary_template() {
+    local config_home="${XDG_CONFIG_HOME:-$HOME/.config}"
+    local config_dir="$config_home/vocotype"
+    local dictionary_file="$config_dir/user-dictionary.yaml"
+    local template_file="$PROJECT_DIR/data/user-dictionary.yaml"
+
+    mkdir -p "$config_dir"
+    if [ -e "$dictionary_file" ]; then
+        echo "✓ 用户词典已存在: $dictionary_file"
+        return
+    fi
+
+    cp "$template_file" "$dictionary_file"
+    echo "✓ 用户词典模板已创建: $dictionary_file"
+}
+
 # 检测 IBus 引擎必需的系统构建依赖（用于编译 pycairo/pygobject）
 check_build_deps() {
     local missing=""
@@ -854,6 +870,9 @@ write_slm_config_json \
     "$SLM_ENABLE_THINKING" \
     "$SLM_API_KEY"
 echo "✓ 已写入配置: $IBUS_RUNTIME_CONFIG"
+
+echo "[可选] 创建用户词典模板..."
+ensure_user_dictionary_template
 
 # 3. 复制项目文件
 echo "[3/6] 复制项目文件..."

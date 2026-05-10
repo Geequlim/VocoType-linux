@@ -228,6 +228,28 @@ journalctl --user -u vocotype-fcitx5-backend.service -f
 - `enable_thinking`：是否允许思考输出（默认 `false`）
 - `retry_without_proxy`：远程请求失败时绕过代理直连重试（默认 `true`）
 
+### 用户词典
+
+安装脚本会创建模板 `~/.config/vocotype/user-dictionary.yaml`。这个词典由 IBus 和 Fcitx 5 共用。
+
+```yaml
+replace:
+  Ghostty:
+    - 鬼斯提
+    - 格斯提
+  NodeJS: node js
+
+protect:
+  - 三体问题
+  - 一加手机
+  - 五四运动
+```
+
+- `replace`：把识别错词替换为标准写法。
+- `protect`：只保护专有名词，避免数字归一化误改。
+- `replace` 的标准词默认也会被保护。
+- 文件保存后会动态加载，YAML 写错时保留上一份成功配置。
+
 ### 2. 重启 Fcitx 5
 
 ```bash

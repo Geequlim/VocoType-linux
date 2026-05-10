@@ -1,0 +1,13 @@
+# VoCoType 用户词典模板
+# replace: 把语音识别常见错词替换为标准写法
+# protect: 只保护专有名词，不参与替换，避免数字归一化误改
+replace:
+  Ghostty:
+    - 鬼斯提
+    - 格斯提
+  NodeJS: node js
+
+protect:
+  - 三体问题
+  - 一加手机
+  - 五四运动

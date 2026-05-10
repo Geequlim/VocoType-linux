@@ -2,9 +2,30 @@
 
 from __future__ import annotations
 
+import importlib.util
 from pathlib import Path
 import re
 from runpy import run_path
+import sys
+from typing import Sequence
+
+try:
+    from .user_dictionary import apply_user_dictionary
+except ImportError:
+    user_dictionary_path = Path(__file__).with_name("user_dictionary.py")
+    user_dictionary_name = "_vocotype_user_dictionary"
+    user_dictionary_module = sys.modules.get(user_dictionary_name)
+    if user_dictionary_module is None:
+        user_dictionary_spec = importlib.util.spec_from_file_location(
+            user_dictionary_name,
+            user_dictionary_path,
+        )
+        if user_dictionary_spec is None or user_dictionary_spec.loader is None:
+            raise
+        user_dictionary_module = importlib.util.module_from_spec(user_dictionary_spec)
+        sys.modules[user_dictionary_spec.name] = user_dictionary_module
+        user_dictionary_spec.loader.exec_module(user_dictionary_module)
+    apply_user_dictionary = user_dictionary_module.apply_user_dictionary
 
 
 def _load_fixed_non_numeric_phrases() -> dict[str, str]:
@@ -227,16 +248,28 @@ _CONTEXT_SEPARATOR_CHARS = " \t\r\n:：#-—_,，是为"
 _FIXED_NON_NUMERIC_PHRASES = _load_fixed_non_numeric_phrases()
 
 
+Span = tuple[int, int]
+
+
 def normalize_text(text: str, *, convert_chinese_numbers: bool = True) -> str:
     """Normalize ASR output without changing its meaning."""
 
     normalized = text or ""
+    protected_spans: tuple[Span, ...] = ()
+    if normalized:
+        dictionary_result = apply_user_dictionary(normalized)
+        normalized = dictionary_result.text
+        protected_spans = dictionary_result.protected_spans
     if convert_chinese_numbers and normalized:
-        normalized = normalize_chinese_numbers(normalized)
+        normalized = normalize_chinese_numbers(normalized, protected_spans=protected_spans)
     return normalized
 
 
-def normalize_chinese_numbers(text: str) -> str:
+def normalize_chinese_numbers(
+    text: str,
+    *,
+    protected_spans: Sequence[Span] = (),
+) -> str:
     """Convert Chinese numerals only when the surrounding text is numeric."""
 
     if not text:
@@ -247,6 +280,9 @@ def normalize_chinese_numbers(text: str) -> str:
         prev_text = text[:start]
         next_text = text[end:]
         full_match = match.group(0)
+
+        if _span_overlaps_protected(start, end, protected_spans):
+            return full_match
 
         if match.group("negative_percent") is not None:
             converted = _convert_structured_number_body(match.group("negative_percent"))
@@ -307,6 +343,14 @@ def normalize_chinese_numbers(text: str) -> str:
         return f"{converted}{preserved_suffix}" if converted is not None else full_match
 
     return _CANDIDATE_RE.sub(_replace, text)
+
+
+def _span_overlaps_protected(
+    start: int,
+    end: int,
+    protected_spans: Sequence[Span],
+) -> bool:
+    return any(span_start < end and start < span_end for span_start, span_end in protected_spans)
 
 
 def _should_convert_general(body: str, *, prev_text: str, next_text: str) -> bool:

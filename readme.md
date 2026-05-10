@@ -132,6 +132,39 @@ fcitx5 -r
 
 ---
 
+## 用户词典
+
+安装脚本会在用户配置目录创建模板：
+
+```text
+~/.config/vocotype/user-dictionary.yaml
+```
+
+如设置了 `XDG_CONFIG_HOME`，则使用 `$XDG_CONFIG_HOME/vocotype/user-dictionary.yaml`。
+
+示例：
+
+```yaml
+replace:
+  Ghostty:
+    - 鬼斯提
+    - 格斯提
+  NodeJS: node js
+
+protect:
+  - 三体问题
+  - 一加手机
+  - 五四运动
+```
+
+- `replace` 用于把 ASR 常见错词替换为标准写法。
+- `protect` 用于保护专有名词，避免后续数字归一化误改。
+- `replace` 的标准词会自动保护。
+- 文件会按修改时间动态加载，通常保存后下一次语音输入即可生效。
+- YAML 写错时会保留上一份成功加载的词典，不会中断输入法。
+
+---
+
 ## IBus 语音编辑（Ctrl+F9）
 
 > 说明：该功能目前由 IBus 引擎提供，Fcitx5 暂未接入同等编辑链路。

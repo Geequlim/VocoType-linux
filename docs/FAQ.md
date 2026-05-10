@@ -783,6 +783,43 @@ sample_rate = 48000
 
 ---
 
+### 15. 用户词典怎么配置？
+
+用户词典路径：
+
+```bash
+~/.config/vocotype/user-dictionary.yaml
+```
+
+如果设置了 `XDG_CONFIG_HOME`，则路径是：
+
+```bash
+$XDG_CONFIG_HOME/vocotype/user-dictionary.yaml
+```
+
+示例：
+
+```yaml
+replace:
+  Ghostty:
+    - 鬼斯提
+    - 格斯提
+  NodeJS: node js
+
+protect:
+  - 三体问题
+  - 一加手机
+  - 五四运动
+```
+
+- `replace`：把 ASR 常见错词替换成标准写法。
+- `protect`：只保护专有名词，不参与替换，避免数字归一化误改。
+- `replace` 的标准词会自动保护。
+- 文件保存后会动态加载，通常下一次语音输入即可生效。
+- YAML 写错时会保留上一份成功加载的词典，并在日志里记录 warning。
+
+---
+
 ## 获取帮助
 
 如果以上方案无法解决问题：

@@ -206,6 +206,28 @@ PTT_KEYVAL = IBus.KEY_F9  # 修改为其他按键
 - `edit_enabled`：是否启用 `Ctrl+F9` 语音编辑（默认 `true`）
 - `edit_max_tokens`：编辑模式输出预算（默认 `256`）
 
+### 用户词典
+
+安装脚本会创建模板 `~/.config/vocotype/user-dictionary.yaml`。这个词典由 IBus 和 Fcitx 5 共用。
+
+```yaml
+replace:
+  Ghostty:
+    - 鬼斯提
+    - 格斯提
+  NodeJS: node js
+
+protect:
+  - 三体问题
+  - 一加手机
+  - 五四运动
+```
+
+- `replace`：把识别错词替换为标准写法。
+- `protect`：只保护专有名词，避免数字归一化误改。
+- `replace` 的标准词默认也会被保护。
+- 文件保存后会动态加载，YAML 写错时保留上一份成功配置。
+
 ### 语音编辑（Ctrl+F9）详解
 
 #### 触发流程

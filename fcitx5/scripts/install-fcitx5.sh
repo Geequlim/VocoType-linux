@@ -217,6 +217,22 @@ with open(target, "w", encoding="utf-8") as f:
 PY
 }
 
+ensure_user_dictionary_template() {
+    local config_home="${XDG_CONFIG_HOME:-$HOME/.config}"
+    local config_dir="$config_home/vocotype"
+    local dictionary_file="$config_dir/user-dictionary.yaml"
+    local template_file="$PROJECT_DIR/data/user-dictionary.yaml"
+
+    mkdir -p "$config_dir"
+    if [ -e "$dictionary_file" ]; then
+        echo "✓ 用户词典已存在: $dictionary_file"
+        return
+    fi
+
+    cp "$template_file" "$dictionary_file"
+    echo "✓ 用户词典模板已创建: $dictionary_file"
+}
+
 echo "=== VoCoType Fcitx 5 语音输入法安装 ==="
 echo "项目目录: $PROJECT_DIR"
 echo ""
@@ -606,6 +622,9 @@ write_slm_config_json \
     "$SLM_ENABLE_THINKING" \
     "$SLM_API_KEY"
 echo "✓ 已写入配置: $FCITX5_BACKEND_CONFIG"
+
+echo "[可选] 创建用户词典模板..."
+ensure_user_dictionary_template
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 8. Rime 输入方案选择（可选）
