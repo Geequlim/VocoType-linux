@@ -36,6 +36,7 @@ constexpr uint64_t RECORDING_ANIMATION_INTERVAL_US = 200000;
 constexpr uint64_t PTT_RELEASE_DEBOUNCE_US = 50000;
 // Suppress only near-simultaneous duplicate commits from the same IC/client.
 constexpr uint64_t DUPLICATE_COMMIT_SUPPRESS_US = 250000;
+constexpr uint64_t XDOTOOL_SPACE_INJECT_GUARD_US = 1000000;
 
 constexpr std::array<const char *, 8> RECORDING_ANIMATION_FRAMES = {
     "🟢 正在听 ●     ",
@@ -104,6 +105,33 @@ std::string stripTrailingCommitPeriod(std::string text) {
     return text;
 }
 
+bool isAsciiWhitespaceOnly(const std::string &text) {
+    return !text.empty() &&
+           std::all_of(text.begin(), text.end(), [](unsigned char ch) {
+               return std::isspace(ch);
+           });
+}
+
+bool hasBlockingModifiers(fcitx::KeyStates states) {
+    return (states & fcitx::KeyState::Ctrl) ||
+           (states & fcitx::KeyState::Alt) ||
+           (states & fcitx::KeyState::Super) ||
+           (states & fcitx::KeyState::Super2) ||
+           (states & fcitx::KeyState::Hyper) ||
+           (states & fcitx::KeyState::Hyper2) ||
+           (states & fcitx::KeyState::Meta);
+}
+
+std::string clientProgram(fcitx::InputContext *ic) {
+    return ic ? toLower(ic->program()) : std::string();
+}
+
+bool usesXdotoolSpaceInjection(fcitx::InputContext *ic) {
+    const std::string program = clientProgram(ic);
+    return program.find("ghostty") != std::string::npos ||
+           program.find("blackbox") != std::string::npos;
+}
+
 std::string stopRecorderProcess(pid_t pid, int stdin_fd, FILE* stdout_file) {
     if (stdin_fd >= 0) {
         close(stdin_fd);
@@ -141,6 +169,11 @@ bool copyTextToWaylandClipboard(const std::string &text) {
     const size_t written = fwrite(text.data(), 1, expected, pipe);
     const int status = pclose(pipe);
     return written == expected && status == 0;
+}
+
+bool sendSpaceWithXdotool() {
+    const int status = std::system("xdotool key --clearmodifiers space");
+    return status == 0;
 }
 
 bool pasteTextToX11Client(const std::string &text) {
@@ -378,14 +411,15 @@ bool VoCoTypeAddon::forwardKeyToRime(fcitx::InputContext* ic, fcitx::KeySym keyv
 
     try {
         RimeUIState state = ipc_client_->processKey(keyval, mask);
+        const bool has_commit_text = !state.commit_text.empty();
 
-        if (!state.commit_text.empty()) {
+        if (has_commit_text) {
             commitText(ic, state.commit_text);
         }
 
         updateUI(ic, state);
 
-        if (state.handled) {
+        if (state.handled || has_commit_text) {
             return true;
         }
     } catch (const std::exception& e) {
@@ -531,6 +565,43 @@ void VoCoTypeAddon::showModeIndicator(fcitx::InputContext* ic,
     mode_indicator_timer_->setOneShot();
 }
 
+bool VoCoTypeAddon::handleUnhandledSpace(fcitx::InputContext* ic,
+                                         const char* reason) {
+    if (usesXdotoolSpaceInjection(ic) &&
+        injectUnhandledSpaceWithXdotool(ic, reason)) {
+        return true;
+    }
+
+    commitText(ic, " ");
+    return true;
+}
+
+bool VoCoTypeAddon::injectUnhandledSpaceWithXdotool(fcitx::InputContext* ic,
+                                                    const char* reason) {
+    if (!std::getenv("DISPLAY")) {
+        FCITX_WARN() << "Cannot inject space without DISPLAY: program="
+                     << ic->program()
+                     << ", frontend=" << std::string(ic->frontendName());
+        return false;
+    }
+
+    space_injection_passthrough_until_us_ =
+        fcitx::now(CLOCK_MONOTONIC) + XDOTOOL_SPACE_INJECT_GUARD_US;
+    std::thread([program = ic->program(), frontend = std::string(ic->frontendName()),
+                 reason = std::string(reason)]() {
+        if (!sendSpaceWithXdotool()) {
+            FCITX_WARN() << "xdotool space injection failed: reason=" << reason
+                         << ", program=" << program
+                         << ", frontend=" << frontend;
+        }
+    }).detach();
+
+    FCITX_INFO() << "Injected space via xdotool: reason=" << reason
+                 << ", program=" << ic->program()
+                 << ", frontend=" << std::string(ic->frontendName());
+    return true;
+}
+
 void VoCoTypeAddon::replayShortTapAsRegularKey(fcitx::InputContext* ic) {
     const auto states = pending_ptt_states_;
     cancelPendingRecordingStart();
@@ -540,6 +611,11 @@ void VoCoTypeAddon::replayShortTapAsRegularKey(fcitx::InputContext* ic) {
     }
 
     if ((states & fcitx::KeyState::Ctrl) || (states & fcitx::KeyState::Alt)) {
+        return;
+    }
+
+    if (ptt_key_sym_ == FcitxKey_space) {
+        handleUnhandledSpace(ic, "short_tap");
         return;
     }
 
@@ -664,6 +740,17 @@ void VoCoTypeAddon::keyEvent(const fcitx::InputMethodEntry& entry,
     auto key = keyEvent.key();
     auto keyval = key.sym();
     bool is_release = keyEvent.isRelease();
+    const bool is_plain_space =
+        keyval == FcitxKey_space && !hasBlockingModifiers(key.states());
+    const uint64_t now_us = fcitx::now(CLOCK_MONOTONIC);
+
+    if (is_plain_space && usesXdotoolSpaceInjection(ic) &&
+        now_us < space_injection_passthrough_until_us_) {
+        FCITX_INFO() << "Passing through injected space: program="
+                     << ic->program()
+                     << ", frontend=" << std::string(ic->frontendName());
+        return;
+    }
 
     FCITX_DEBUG() << "Key event: keyval=" << keyval
                   << ", release=" << is_release
@@ -774,6 +861,11 @@ void VoCoTypeAddon::keyEvent(const fcitx::InputMethodEntry& entry,
     // 其他键：转发给 Rime
     if (!is_release) {
         if (forwardKeyToRime(ic, keyval, key.states())) {
+            keyEvent.filterAndAccept();
+            return;
+        }
+        if (is_plain_space) {
+            handleUnhandledSpace(ic, "unhandled_space");
             keyEvent.filterAndAccept();
             return;
         }
@@ -1156,7 +1248,8 @@ void VoCoTypeAddon::commitText(fcitx::InputContext* ic, const std::string& text,
     }
 
     clearUI(ic);
-    if (ic->capabilityFlags() & fcitx::CapabilityFlag::CommitStringWithCursor) {
+    if (!isAsciiWhitespaceOnly(commit_text) &&
+        (ic->capabilityFlags() & fcitx::CapabilityFlag::CommitStringWithCursor)) {
         ic->commitStringWithCursor(commit_text, fcitx::utf8::length(commit_text));
     } else {
         ic->commitString(commit_text);

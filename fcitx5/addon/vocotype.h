@@ -111,6 +111,9 @@ private:
     void clearRawCompositionBuffer();
     void showModeIndicator(fcitx::InputContext* ic, const std::string& indicator);
     void replayShortTapAsRegularKey(fcitx::InputContext* ic);
+    bool handleUnhandledSpace(fcitx::InputContext* ic, const char* reason);
+    bool injectUnhandledSpaceWithXdotool(fcitx::InputContext* ic,
+                                         const char* reason);
     void showPanelMessage(fcitx::InputContext* ic, const std::string& message);
     void startPanelAnimation(fcitx::InputContext* ic, PanelAnimationKind kind);
     void startRecordingAnimation(fcitx::InputContext* ic);
@@ -184,6 +187,7 @@ private:
     bool ptt_pressed_ = false;
     bool pending_long_mode_ = false;
     fcitx::KeyStates pending_ptt_states_ = fcitx::KeyState::NoState;
+    uint64_t space_injection_passthrough_until_us_ = 0;
     std::unique_ptr<fcitx::EventSourceTime> ptt_hold_timer_;
     std::unique_ptr<fcitx::EventSourceTime> ptt_release_timer_;
     std::unique_ptr<fcitx::EventSourceTime> recording_animation_timer_;
