@@ -1,5 +1,6 @@
 #!/bin/bash
-# VoCoType Fcitx 5 安装脚本
+# VoCoType Linux Fcitx 5 安装脚本
+# 当前仓库只维护这一套前端实现
 #
 # 用法: install-fcitx5.sh [--device <id>] [--sample-rate <rate>] [--skip-audio]
 #   --device <id>      指定音频设备ID，跳过交互式配置
@@ -44,6 +45,8 @@ PROJECT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../.." && pwd
 INSTALL_DIR="$HOME/.local/share/vocotype-fcitx5"
 SCRIPT_DIR="$PROJECT_DIR/scripts"
 INSTALLED_SETUP_AUDIO_SCRIPT="$INSTALL_DIR/scripts/setup-audio.py"
+CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+FCITX5_BACKEND_CONFIG="$CONFIG_HOME/vocotype/fcitx5-backend.json"
 PYTHON_MIN_MINOR=11
 PYTHON_MAX_MINOR=12
 DEFAULT_UV_PYTHON="3.12"
@@ -237,62 +240,68 @@ echo "=== VoCoType Fcitx 5 语音输入法安装 ==="
 echo "项目目录: $PROJECT_DIR"
 echo ""
 
-echo "是否启用长句 SLM 润色（Shift+F9）？"
-echo "  [1] 不启用（默认）- 不安装 SLM 模型，保持最低资源占用"
-echo "  [2] 启用 - 配置 SLM 润色"
-echo ""
-read -r -p "请输入选项 (默认 1): " SLM_CHOICE
-case "$SLM_CHOICE" in
-    2)
-        ENABLE_SLM=1
-        echo ""
-        echo "您选择启用 SLM 润色。"
-        echo "请选择 SLM 运行方式："
-        echo "  [1] 本地一次性加载（推荐）：按下 Shift+F9 预加载，润色后释放"
-        echo "  [2] 远程 HTTP 服务：调用已有 endpoint（OpenAI 兼容）"
-        read -r -p "请输入选项 (默认 1): " SLM_PROVIDER_CHOICE
-
-        if [ "$SLM_PROVIDER_CHOICE" = "2" ]; then
-            SLM_PROVIDER="remote"
-            read -r -p "SLM 模型名 (默认 $SLM_MODEL): " SLM_MODEL_INPUT
-            if [ -n "$SLM_MODEL_INPUT" ]; then
-                SLM_MODEL="$SLM_MODEL_INPUT"
-            fi
-
-            read -r -p "SLM Endpoint (默认 $SLM_ENDPOINT): " SLM_ENDPOINT_INPUT
-            if [ -n "$SLM_ENDPOINT_INPUT" ]; then
-                SLM_ENDPOINT="$SLM_ENDPOINT_INPUT"
-            fi
-            read -r -s -p "SLM API Key（可留空，输入时不回显）: " SLM_API_KEY_INPUT
+if [ -f "$FCITX5_BACKEND_CONFIG" ]; then
+    echo "检测到已有 backend 配置文件：$FCITX5_BACKEND_CONFIG"
+    echo "将跳过 SLM 相关交互和配置写入，避免覆盖现有设置。"
+    echo "如需调整，请手动编辑该文件。"
+else
+    echo "是否启用长句 SLM 润色（Shift+F9）？"
+    echo "  [1] 不启用（默认）- 不安装 SLM 模型，保持最低资源占用"
+    echo "  [2] 启用 - 配置 SLM 润色"
+    echo ""
+    read -r -p "请输入选项 (默认 1): " SLM_CHOICE
+    case "$SLM_CHOICE" in
+        2)
+            ENABLE_SLM=1
             echo ""
-            if [ -n "$SLM_API_KEY_INPUT" ]; then
-                SLM_API_KEY="$SLM_API_KEY_INPUT"
+            echo "您选择启用 SLM 润色。"
+            echo "请选择 SLM 运行方式："
+            echo "  [1] 本地一次性加载（推荐）：按下 Shift+F9 预加载，润色后释放"
+            echo "  [2] 远程 HTTP 服务：调用已有 endpoint（OpenAI 兼容）"
+            read -r -p "请输入选项 (默认 1): " SLM_PROVIDER_CHOICE
+
+            if [ "$SLM_PROVIDER_CHOICE" = "2" ]; then
+                SLM_PROVIDER="remote"
+                read -r -p "SLM 模型名 (默认 $SLM_MODEL): " SLM_MODEL_INPUT
+                if [ -n "$SLM_MODEL_INPUT" ]; then
+                    SLM_MODEL="$SLM_MODEL_INPUT"
+                fi
+
+                read -r -p "SLM Endpoint (默认 $SLM_ENDPOINT): " SLM_ENDPOINT_INPUT
+                if [ -n "$SLM_ENDPOINT_INPUT" ]; then
+                    SLM_ENDPOINT="$SLM_ENDPOINT_INPUT"
+                fi
+                read -r -s -p "SLM API Key（可留空，输入时不回显）: " SLM_API_KEY_INPUT
+                echo ""
+                if [ -n "$SLM_API_KEY_INPUT" ]; then
+                    SLM_API_KEY="$SLM_API_KEY_INPUT"
+                fi
+            else
+                SLM_PROVIDER="local_ephemeral"
+                SLM_TIMEOUT_MS=12000
+                SLM_WARMUP_TIMEOUT_MS=90000
+                SLM_MAX_TOKENS=96
+                SLM_ENABLE_THINKING=0
+                SLM_API_KEY=""
+                read -r -p "本地模型名/路径 (默认 $SLM_LOCAL_MODEL): " SLM_LOCAL_MODEL_INPUT
+                if [ -n "$SLM_LOCAL_MODEL_INPUT" ]; then
+                    SLM_LOCAL_MODEL="$SLM_LOCAL_MODEL_INPUT"
+                    SLM_MODEL="$SLM_LOCAL_MODEL_INPUT"
+                fi
+                read -r -p "是否安装本地 SLM 依赖（torch/transformers/sentencepiece/socksio）? (Y/n): " INSTALL_SLM_DEPS
+                if [[ ! "$INSTALL_SLM_DEPS" =~ ^[Nn]$ ]]; then
+                    SLM_INSTALL_LOCAL_DEPS=1
+                fi
             fi
-        else
-            SLM_PROVIDER="local_ephemeral"
-            SLM_TIMEOUT_MS=12000
-            SLM_WARMUP_TIMEOUT_MS=90000
-            SLM_MAX_TOKENS=96
-            SLM_ENABLE_THINKING=0
+            ;;
+        ""|1|*)
+            ENABLE_SLM=0
             SLM_API_KEY=""
-            read -r -p "本地模型名/路径 (默认 $SLM_LOCAL_MODEL): " SLM_LOCAL_MODEL_INPUT
-            if [ -n "$SLM_LOCAL_MODEL_INPUT" ]; then
-                SLM_LOCAL_MODEL="$SLM_LOCAL_MODEL_INPUT"
-                SLM_MODEL="$SLM_LOCAL_MODEL_INPUT"
-            fi
-            read -r -p "是否安装本地 SLM 依赖（torch/transformers/sentencepiece/socksio）? (Y/n): " INSTALL_SLM_DEPS
-            if [[ ! "$INSTALL_SLM_DEPS" =~ ^[Nn]$ ]]; then
-                SLM_INSTALL_LOCAL_DEPS=1
-            fi
-        fi
-        ;;
-    ""|1|*)
-        ENABLE_SLM=0
-        SLM_API_KEY=""
-        echo ""
-        echo "已禁用 SLM 润色（Shift+F9 不会触发润色）。"
-        ;;
-esac
+            echo ""
+            echo "已禁用 SLM 润色（Shift+F9 不会触发润色）。"
+            ;;
+    esac
+fi
 echo ""
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -605,23 +614,27 @@ fi
 
 echo ""
 echo "[可选] 写入 SLM 配置..."
-FCITX5_BACKEND_CONFIG="$HOME/.config/vocotype/fcitx5-backend.json"
-write_slm_config_json \
-    "$FCITX5_BACKEND_CONFIG" \
-    "$PYTHON" \
-    "$ENABLE_SLM" \
-    "$SLM_PROVIDER" \
-    "$SLM_ENDPOINT" \
-    "$SLM_MODEL" \
-    "$SLM_LOCAL_MODEL" \
-    "$SLM_LOCAL_PYTHON" \
-    "$SLM_TIMEOUT_MS" \
-    "$SLM_MIN_CHARS" \
-    "$SLM_MAX_TOKENS" \
-    "$SLM_WARMUP_TIMEOUT_MS" \
-    "$SLM_ENABLE_THINKING" \
-    "$SLM_API_KEY"
-echo "✓ 已写入配置: $FCITX5_BACKEND_CONFIG"
+if [ -f "$FCITX5_BACKEND_CONFIG" ]; then
+    echo "✓ 检测到已有配置，已跳过写入: $FCITX5_BACKEND_CONFIG"
+    echo "  如需修改 SLM / logging / backend 配置，请手动编辑该文件。"
+else
+    write_slm_config_json \
+        "$FCITX5_BACKEND_CONFIG" \
+        "$PYTHON" \
+        "$ENABLE_SLM" \
+        "$SLM_PROVIDER" \
+        "$SLM_ENDPOINT" \
+        "$SLM_MODEL" \
+        "$SLM_LOCAL_MODEL" \
+        "$SLM_LOCAL_PYTHON" \
+        "$SLM_TIMEOUT_MS" \
+        "$SLM_MIN_CHARS" \
+        "$SLM_MAX_TOKENS" \
+        "$SLM_WARMUP_TIMEOUT_MS" \
+        "$SLM_ENABLE_THINKING" \
+        "$SLM_API_KEY"
+    echo "✓ 已写入配置: $FCITX5_BACKEND_CONFIG"
+fi
 
 echo "[可选] 创建用户词典模板..."
 ensure_user_dictionary_template

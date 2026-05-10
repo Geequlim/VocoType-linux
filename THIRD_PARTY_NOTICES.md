@@ -10,8 +10,13 @@ Runtime dependencies (from requirements.txt / pyproject.toml):
 - soundfile 0.13.1 - https://github.com/bastibe/python-soundfile
 - funasr_onnx 0.4.1 - https://github.com/modelscope/FunASR
 - jieba 0.42.1 - https://github.com/fxsjy/jieba
-- PyGObject >=3.42.0, <3.51 - https://pygobject.readthedocs.io/
+- PyYAML >=6.0.0 - https://pyyaml.org/
 - modelscope 1.30.0 - https://github.com/modelscope/modelscope
+
+Optional dependencies:
+- pyrime >=0.2.1 - https://github.com/syccxcc/pyrime
+- torch - https://pytorch.org/
+- transformers - https://github.com/huggingface/transformers
 
 Models (downloaded via ModelScope):
 - iic/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-onnx

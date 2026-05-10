@@ -1,4 +1,4 @@
-# VoCoType Linux IBus 输入法依赖
+# VoCoType Linux Fcitx 5 后端依赖
 # 注：pyproject.toml 为标准安装入口；本文件保留用于 pinned 安装
 
 # 音频采集和处理
@@ -11,15 +11,9 @@ funasr_onnx==0.4.1
 jieba==0.42.1
 PyYAML>=6.0.0
 
-# IBus Python 绑定 (Linux 必需)
-# PyGObject 3.42 在 Python 3.12 上会导致 gi.repository 动态导入失效
-#（F9 无响应，engine 进程启动即退出），因此按 Python 版本分流。
-PyGObject>=3.42.0; python_version < "3.12"
-PyGObject>=3.56.0; python_version >= "3.12"
-
 # 模型下载 (推荐)
 modelscope==1.30.0
 
 # 说明：
 # - 默认使用 ONNX 路线；启用本地 SLM 需要 torch（CPU/GPU 版本按需选择）
-# - PyGObject 需要系统包：python3-gi, gir1.2-ibus-1.0, gobject-introspection
+# - Rime 相关的 pyrime 由安装脚本按需安装

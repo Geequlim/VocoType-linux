@@ -1,6 +1,6 @@
 """音频处理工具模块
 
-提供音频配置加载和重采样等通用功能，供 IBus 和 Fcitx5 共享使用。
+提供音频配置加载和重采样等通用功能，供 Fcitx 5 backend 使用。
 """
 from __future__ import annotations
 

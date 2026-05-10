@@ -86,6 +86,17 @@ def _merge_dict(base: Dict[str, Any], overrides: Dict[str, Any]) -> Dict[str, An
     return result
 
 
+def _expand_env_vars(value: Any) -> Any:
+    """Recursively expand environment variables in string config values."""
+    if isinstance(value, dict):
+        return {key: _expand_env_vars(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_expand_env_vars(item) for item in value]
+    if isinstance(value, str):
+        return os.path.expandvars(value)
+    return value
+
+
 def load_config(path: Optional[str] = None) -> Dict[str, Any]:
     """Load configuration from JSON file if provided, otherwise defaults."""
 
@@ -100,7 +111,7 @@ def load_config(path: Optional[str] = None) -> Dict[str, Any]:
     with open(expanded_path, "r", encoding="utf-8") as f:
         overrides = json.load(f)
 
-    return _merge_dict(config, overrides)
+    return _merge_dict(config, _expand_env_vars(overrides))
 
 
 def ensure_logging_dir(config: Dict[str, Any]) -> str:

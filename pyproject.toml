@@ -3,9 +3,9 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "vocotype-ibus"
+name = "vocotype-fcitx5"
 dynamic = ["version"]
-description = "Linux IBus voice input method for VoCoType"
+description = "Linux Fcitx 5 voice input method for VoCoType"
 readme = { file = "readme.md", content-type = "text/markdown" }
 requires-python = ">=3.11,<3.13"
 license = { file = "LICENSE" }
@@ -19,8 +19,6 @@ dependencies = [
   "funasr_onnx==0.4.1",
   "jieba==0.42.1",
   "PyYAML>=6.0.0",
-  "PyGObject>=3.42.0; python_version < '3.12'",
-  "PyGObject>=3.56.0; python_version >= '3.12'",
   "modelscope==1.30.0",
 ]
 
@@ -41,17 +39,16 @@ slm = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/vocotype"
+Homepage = "https://github.com/LeonardNJU/VocoType-linux"
 
 [project.scripts]
-vocotype-ibus = "ibus.main:main"
 vocotype-download-models = "app.download_models:main"
 
 [tool.setuptools]
 py-modules = ["vocotype_version"]
 
 [tool.setuptools.packages.find]
-include = ["app*", "ibus*"]
+include = ["app*"]
 
 [tool.setuptools.dynamic]
 version = { attr = "vocotype_version.__version__" }
