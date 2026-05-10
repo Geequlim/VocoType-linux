@@ -236,6 +236,27 @@ ensure_user_dictionary_template() {
     echo "✓ 用户词典模板已创建: $dictionary_file"
 }
 
+restart_running_backend_if_needed() {
+    local unit_name="vocotype-fcitx5-backend.service"
+
+    if command -v systemctl >/dev/null 2>&1; then
+        if systemctl --user is-active --quiet "$unit_name"; then
+            if systemctl --user restart "$unit_name" >/dev/null 2>&1; then
+                echo "✓ 已重启正在运行的后台服务，使新安装立即生效"
+            else
+                echo "⚠️  后台服务正在运行，但自动重启失败，请手动执行："
+                echo "   systemctl --user restart $unit_name"
+            fi
+            return
+        fi
+    fi
+
+    if pgrep -f "fcitx5_server.py" >/dev/null 2>&1; then
+        echo "⚠️  检测到已有后台进程正在运行，但未由 systemd 管理。"
+        echo "   请手动重启该进程，否则新安装不会立即生效。"
+    fi
+}
+
 echo "=== VoCoType Fcitx 5 语音输入法安装 ==="
 echo "项目目录: $PROJECT_DIR"
 echo ""
@@ -927,6 +948,8 @@ if command -v systemctl >/dev/null 2>&1; then
     systemctl --user daemon-reload >/dev/null 2>&1 || \
         echo "⚠️  systemctl --user daemon-reload 失败，请手动执行"
 fi
+
+restart_running_backend_if_needed
 
 echo "✓ 后台服务启动器已创建"
 if [ "$PYTHON" = "$PROJECT_DIR/.venv/bin/python" ]; then
