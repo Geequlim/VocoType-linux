@@ -56,6 +56,19 @@ replace:
     assert text_normalizer.normalize_text("鬼斯提 和 node js") == "Ghostty 和 NodeJS"
 
 
+def test_user_dictionary_replacements_ignore_case(dictionary_path: Path):
+    write_dictionary(
+        dictionary_path,
+        """
+replace:
+  Ghostty: ghostty
+  NodeJS: node js
+""",
+    )
+
+    assert text_normalizer.normalize_text("GHOSTTY 和 Node Js") == "Ghostty 和 NodeJS"
+
+
 def test_user_dictionary_treats_yaml_scalars_as_strings(dictionary_path: Path):
     write_dictionary(
         dictionary_path,
@@ -93,6 +106,18 @@ protect:
     )
 
     assert text_normalizer.normalize_text("一百米计划启动，一百米") == "一百米计划启动，100米"
+
+
+def test_user_dictionary_protects_configured_phrases_ignore_case(dictionary_path: Path):
+    write_dictionary(
+        dictionary_path,
+        """
+protect:
+  - API一百二十
+""",
+    )
+
+    assert text_normalizer.normalize_text("api一百二十启动，设置成一百二十") == "api一百二十启动，设置成120"
 
 
 def test_chinese_number_normalizer_respects_protected_spans(dictionary_path: Path):

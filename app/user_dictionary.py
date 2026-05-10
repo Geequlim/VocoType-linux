@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import logging
 import os
 from pathlib import Path
+import re
 from typing import Any
 
 import yaml
@@ -26,7 +27,7 @@ class UserDictionaryResult:
 
 @dataclass(frozen=True)
 class UserDictionary:
-    replacements: tuple[tuple[str, str], ...] = ()
+    replacements: tuple[tuple[str, str, str], ...] = ()
     protected_phrases: tuple[str, ...] = ()
 
     def apply(self, text: str) -> UserDictionaryResult:
@@ -52,8 +53,8 @@ class UserDictionary:
         while source_index < len(text):
             matched_alias = ""
             matched_term = ""
-            for alias, term in self.replacements:
-                if text.startswith(alias, source_index):
+            for alias, alias_folded, term in self.replacements:
+                if _slice_casefold_equals(text, source_index, alias, alias_folded):
                     matched_alias = alias
                     matched_term = term
                     break
@@ -161,8 +162,8 @@ def _compile_user_dictionary(raw: Any) -> UserDictionary:
     return UserDictionary(replacements=replacements, protected_phrases=protected_phrases)
 
 
-def _compile_replacements(config: dict[Any, Any]) -> tuple[tuple[str, str], ...]:
-    replacements: dict[str, str] = {}
+def _compile_replacements(config: dict[Any, Any]) -> tuple[tuple[str, str, str], ...]:
+    replacements: dict[str, tuple[str, str]] = {}
 
     for raw_term, raw_aliases in config.items():
         term = _normalize_phrase(raw_term, "replace 的标准词")
@@ -170,19 +171,23 @@ def _compile_replacements(config: dict[Any, Any]) -> tuple[tuple[str, str], ...]
         for alias in aliases:
             if alias == term:
                 continue
-            if alias in replacements and replacements[alias] != term:
+            alias_key = alias.casefold()
+            if alias_key in replacements and replacements[alias_key][1] != term:
                 logger.warning(
                     "用户词典别名冲突，保留首次映射: alias=%s, kept=%s, ignored=%s",
                     alias,
-                    replacements[alias],
+                    replacements[alias_key][1],
                     term,
                 )
                 continue
-            replacements[alias] = term
+            replacements[alias_key] = (alias, term)
 
     return tuple(
         sorted(
-            replacements.items(),
+            (
+                (alias, alias_key, term)
+                for alias_key, (alias, term) in replacements.items()
+            ),
             key=lambda item: (-len(item[0]), item[0]),
         )
     )
@@ -225,11 +230,16 @@ def _normalize_phrase(raw_phrase: Any, label: str) -> str:
 def _find_phrase_spans(text: str, phrases: tuple[str, ...]) -> tuple[Span, ...]:
     spans: list[Span] = []
     for phrase in phrases:
-        start = text.find(phrase)
-        while start != -1:
-            spans.append((start, start + len(phrase)))
-            start = text.find(phrase, start + 1)
+        for match in re.finditer(re.escape(phrase), text, flags=re.IGNORECASE):
+            spans.append(match.span())
     return tuple(spans)
+
+
+def _slice_casefold_equals(text: str, start: int, phrase: str, phrase_folded: str) -> bool:
+    end = start + len(phrase)
+    if end > len(text):
+        return False
+    return text[start:end].casefold() == phrase_folded
 
 
 def _merge_spans(spans: tuple[Span, ...]) -> tuple[Span, ...]:
