@@ -23,6 +23,12 @@ Linux 离线语音输入法，当前仅维护 **Fcitx 5** 版本。
 - 与 Fcitx 5 Rime 配合使用，语音和拼音共存
 - 共享用户词典：`~/.config/vocotype/user-dictionary.yaml`
 
+## 演示
+
+<img src="screenshots/video.gif" alt="VoCoType 演示" width="1080">
+
+也可以直接打开 [MP4 演示视频](screenshots/video.mp4) 查看原始版本。
+
 ## 快速开始
 
 ```bash
