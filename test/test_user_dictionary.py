@@ -157,6 +157,25 @@ replace:
     assert text_normalizer.normalize_text("alpha beta") == "长词"
 
 
+def test_user_dictionary_expands_nested_terms_in_aliases(dictionary_path: Path):
+    write_dictionary(
+        dictionary_path,
+        """
+replace:
+  README:
+    - read me
+    - readme
+  README.md:
+    - README点MD
+    - README文件
+""",
+    )
+
+    assert text_normalizer.normalize_text("read me点md") == "README.md"
+    assert text_normalizer.normalize_text("readme文件") == "README.md"
+    assert text_normalizer.normalize_text("read me") == "README"
+
+
 def test_user_dictionary_reloads_when_file_changes(dictionary_path: Path):
     write_dictionary(
         dictionary_path,

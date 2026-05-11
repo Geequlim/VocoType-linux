@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 USER_DICTIONARY_ENV = "VOCOTYPE_USER_DICTIONARY"
 USER_DICTIONARY_FILENAME = "user-dictionary.yaml"
 Span = tuple[int, int]
+_MAX_NESTED_ALIAS_EXPANSIONS = 256
 
 
 @dataclass(frozen=True)
@@ -164,23 +165,43 @@ def _compile_user_dictionary(raw: Any) -> UserDictionary:
 
 def _compile_replacements(config: dict[Any, Any]) -> tuple[tuple[str, str, str], ...]:
     replacements: dict[str, tuple[str, str]] = {}
+    entries: list[tuple[str, tuple[str, ...]]] = []
 
     for raw_term, raw_aliases in config.items():
         term = _normalize_phrase(raw_term, "replace 的标准词")
         aliases = _normalize_aliases(raw_aliases, term)
+        entries.append((term, aliases))
+
+    term_aliases = {
+        term: aliases
+        for term, aliases in entries
+        if aliases
+    }
+    nested_terms = tuple(
+        sorted(
+            (
+                (term, term.casefold(), aliases)
+                for term, aliases in term_aliases.items()
+            ),
+            key=lambda item: (-len(item[0]), item[0]),
+        )
+    )
+
+    for term, aliases in entries:
         for alias in aliases:
-            if alias == term:
-                continue
-            alias_key = alias.casefold()
-            if alias_key in replacements and replacements[alias_key][1] != term:
-                logger.warning(
-                    "用户词典别名冲突，保留首次映射: alias=%s, kept=%s, ignored=%s",
-                    alias,
-                    replacements[alias_key][1],
-                    term,
-                )
-                continue
-            replacements[alias_key] = (alias, term)
+            for expanded_alias in _expand_nested_aliases(alias, term, nested_terms):
+                if expanded_alias == term:
+                    continue
+                alias_key = expanded_alias.casefold()
+                if alias_key in replacements and replacements[alias_key][1] != term:
+                    logger.warning(
+                        "用户词典别名冲突，保留首次映射: alias=%s, kept=%s, ignored=%s",
+                        expanded_alias,
+                        replacements[alias_key][1],
+                        term,
+                    )
+                    continue
+                replacements[alias_key] = (expanded_alias, term)
 
     return tuple(
         sorted(
@@ -191,6 +212,55 @@ def _compile_replacements(config: dict[Any, Any]) -> tuple[tuple[str, str, str],
             key=lambda item: (-len(item[0]), item[0]),
         )
     )
+
+
+def _expand_nested_aliases(
+    alias: str,
+    current_term: str,
+    nested_terms: tuple[tuple[str, str, tuple[str, ...]], ...],
+) -> tuple[str, ...]:
+    current_term_key = current_term.casefold()
+    expanded: list[str] = []
+    seen: set[str] = set()
+    truncated = False
+
+    def add(candidate: str) -> None:
+        nonlocal truncated
+        if candidate in seen:
+            return
+        if len(expanded) >= _MAX_NESTED_ALIAS_EXPANSIONS:
+            truncated = True
+            return
+        seen.add(candidate)
+        expanded.append(candidate)
+
+    def walk(index: int, prefix: str) -> None:
+        if len(expanded) >= _MAX_NESTED_ALIAS_EXPANSIONS:
+            add(prefix + alias[index:])
+            return
+        if index >= len(alias):
+            add(prefix)
+            return
+
+        walk(index + 1, prefix + alias[index])
+
+        for term, term_folded, aliases in nested_terms:
+            if term_folded == current_term_key:
+                continue
+            if _slice_casefold_equals(alias, index, term, term_folded):
+                for nested_alias in aliases:
+                    walk(index + len(term), prefix + nested_alias)
+
+    walk(0, "")
+
+    if truncated:
+        logger.warning(
+            "用户词典嵌套别名过多，已截断: term=%s, alias=%s, limit=%s",
+            current_term,
+            alias,
+            _MAX_NESTED_ALIAS_EXPANSIONS,
+        )
+    return tuple(expanded)
 
 
 def _compile_protected_phrases(
