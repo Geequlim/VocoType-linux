@@ -265,12 +265,6 @@ def _build_parser() -> argparse.ArgumentParser:
         help="SLM temperature",
     )
     parser.add_argument("--slm-top-p", type=float, default=0.9, help="SLM top_p")
-    parser.add_argument("--slm-top-k", type=int, default=20, help="SLM top_k")
-    parser.add_argument(
-        "--slm-enable-thinking",
-        action="store_true",
-        help="向 endpoint 传 enable_thinking=true",
-    )
     parser.add_argument("--slm-api-key", default="", help="SLM API Key（可选）")
     parser.add_argument(
         "--slm-pid",
@@ -319,8 +313,6 @@ def _build_slm_config(args: argparse.Namespace) -> Dict[str, Any]:
         "max_tokens": args.slm_max_tokens,
         "temperature": args.slm_temperature,
         "top_p": args.slm_top_p,
-        "top_k": args.slm_top_k,
-        "enable_thinking": bool(args.slm_enable_thinking),
         "api_key": args.slm_api_key,
     }
 

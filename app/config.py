@@ -41,28 +41,17 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     },
     "slm": {
         "enabled": False,
-        "provider": "remote",
         "endpoint": "http://127.0.0.1:18080/v1/chat/completions",
         "model": "Qwen/Qwen3.5-0.8B",
         "timeout_ms": 12000,
-        # local_ephemeral 仅在长句模式下预加载，润色完成后释放模型
-        "warmup_timeout_ms": 90000,
-        # 空闲保活时长：长句结束后保留模型，便于连续输入复用
-        "keepalive_ms": 60000,
-        # 松键后最多额外等待模型就绪时长（避免长时间卡住）
-        "ready_wait_ms": 2000,
-        "local_model": "Qwen/Qwen3.5-0.8B",
-        "local_python": "",
-        "local_device": "cpu",
-        "local_dtype": "auto",
+        # 流式润色按最近一次模型输出重新计时，而不是按请求开始计时
+        "stream_idle_timeout_ms": 12000,
+        # 0 表示不额外设置 SDK 请求总超时，避免覆盖 idle timeout 语义
+        "transport_timeout_ms": 0,
         "min_chars": 8,
         "max_tokens": 96,
         "temperature": 0.0,
         "top_p": 0.9,
-        "top_k": 20,
-        "enable_thinking": False,
-        "edit_enabled": True,
-        "edit_max_tokens": 256,
         "api_key": "",
     },
     "output": {

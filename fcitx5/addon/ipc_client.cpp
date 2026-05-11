@@ -9,6 +9,7 @@
 #include <cstring>
 #include <cerrno>
 #include <stdexcept>
+#include <utility>
 #include <nlohmann/json.hpp>
 
 using json = nlohmann::json;
@@ -112,20 +113,87 @@ TranscribeResult IPCClient::transcribeAudio(const std::string& audio_path, bool 
     return result;
 }
 
-bool IPCClient::prewarmSlm() {
+TranscribeStartResult IPCClient::startTranscription(const std::string& audio_path,
+                                                    bool long_mode) {
+    TranscribeStartResult result;
+
     try {
-        json request = {{"type", "slm_prewarm"}};
+        json request = {
+            {"type", "transcribe_start"},
+            {"audio_path", audio_path},
+            {"long_mode", long_mode}
+        };
+
         std::string response_str = sendRequest(request.dump());
         json response = json::parse(response_str);
-        return response.value("success", false);
+
+        result.success = response.value("success", false);
+        result.task_id = response.value("task_id", "");
+        result.status = response.value("status", "");
+        if (!result.success) {
+            result.error = response.value("error", "Unknown error");
+        }
     } catch (const std::exception& e) {
-        return false;
+        result.success = false;
+        result.error = e.what();
     }
+
+    return result;
 }
 
-bool IPCClient::releaseSlm() {
+PolishPollResult IPCClient::pollPolishTask(const std::string& task_id, int after_seq) {
+    PolishPollResult result;
+
     try {
-        json request = {{"type", "slm_release"}};
+        json request = {
+            {"type", "polish_poll"},
+            {"task_id", task_id},
+            {"after_seq", after_seq}
+        };
+
+        std::string response_str = sendRequest(request.dump());
+        json response = json::parse(response_str);
+
+        result.success = response.value("success", false);
+        result.task_id = response.value("task_id", task_id);
+        result.status = response.value("status", "");
+        result.phase = response.value("phase", "");
+        result.error = response.value("error", "");
+        result.reason = response.value("reason", "");
+        result.preview = response.value("preview", "");
+        result.final_text = response.value("final_text", "");
+        result.original_text = response.value("original_text", "");
+        result.last_seq = response.value("last_seq", after_seq);
+
+        if (response.contains("events") && response["events"].is_array()) {
+            for (const auto& event : response["events"]) {
+                PolishEvent parsed;
+                parsed.seq = event.value("seq", 0);
+                parsed.kind = event.value("kind", "");
+                parsed.text = event.value("text", "");
+                parsed.preview = event.value("preview", "");
+                parsed.reason = event.value("reason", "");
+                result.events.push_back(std::move(parsed));
+            }
+        }
+
+        if (!result.success && result.error.empty()) {
+            result.error = "Unknown error";
+        }
+    } catch (const std::exception& e) {
+        result.success = false;
+        result.error = e.what();
+    }
+
+    return result;
+}
+
+bool IPCClient::cancelPolishTask(const std::string& task_id) {
+    try {
+        json request = {
+            {"type", "polish_cancel"},
+            {"task_id", task_id}
+        };
         std::string response_str = sendRequest(request.dump());
         json response = json::parse(response_str);
         return response.value("success", false);

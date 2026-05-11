@@ -39,6 +39,7 @@ def test_load_config_expands_env_vars_in_slm_fields(tmp_path: Path, monkeypatch)
     assert config["slm"]["endpoint"] == "https://example.com/v1/chat/completions"
     assert config["slm"]["model"] == "test/model"
     assert config["slm"]["api_key"] == "secret-token"
+    assert "litellm_model" not in config["slm"]
 
 
 def test_load_config_keeps_missing_env_var_placeholder(tmp_path: Path) -> None:
@@ -58,3 +59,44 @@ def test_load_config_keeps_missing_env_var_placeholder(tmp_path: Path) -> None:
     config = config_module.load_config(str(config_path))
 
     assert config["slm"]["endpoint"] == "${VOCOTYPE_MISSING_ENDPOINT}"
+
+
+def test_load_config_accepts_user_remote_slm_shape(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config_module = _load_config_module()
+    monkeypatch.setenv("COMMON_LLM_API_BASE_URL", "https://llm.example.com/v1")
+    monkeypatch.setenv("COMMON_LLM_API_KEY", "secret-token")
+
+    config_path = tmp_path / "fcitx5-backend.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "slm": {
+                    "enabled": True,
+                    "endpoint": "${COMMON_LLM_API_BASE_URL}/chat/completions",
+                    "model": "deepseek/deepseek-v4-flash",
+                    "timeout_ms": 8000,
+                    "min_chars": 8,
+                    "max_tokens": 512,
+                    "enable_thinking": False,
+                    "api_key": "${COMMON_LLM_API_KEY}",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    config = config_module.load_config(str(config_path))
+
+    assert config["slm"]["enabled"] is True
+    assert config["slm"]["endpoint"] == "https://llm.example.com/v1/chat/completions"
+    assert config["slm"]["model"] == "deepseek/deepseek-v4-flash"
+    assert config["slm"]["timeout_ms"] == 8000
+    assert config["slm"]["min_chars"] == 8
+    assert config["slm"]["max_tokens"] == 512
+    assert config["slm"]["enable_thinking"] is False
+    assert config["slm"]["api_key"] == "secret-token"
+    assert "local_model" not in config["slm"]
+    assert "litellm_model" not in config["slm"]

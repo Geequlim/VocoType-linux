@@ -121,6 +121,15 @@ private:
     void startPolishingAnimation(fcitx::InputContext* ic);
     void stopRecordingAnimation();
     void showAnimationFrame(fcitx::InputContext* ic);
+    void startPolishPolling(fcitx::InputContext* ic, const std::string& task_id);
+    void schedulePolishPoll(fcitx::TrackableObjectReference<fcitx::InputContext> ic_ref);
+    void handlePolishPollResult(fcitx::InputContext* ic,
+                                const PolishPollResult& result);
+    void showPolishProgress(fcitx::InputContext* ic,
+                            const std::string& status,
+                            const std::string& preview,
+                            const std::string& original_text);
+    void cancelActivePolishTask();
 
     /**
      * F9 按下：开始录音
@@ -192,6 +201,7 @@ private:
     std::unique_ptr<fcitx::EventSourceTime> ptt_release_timer_;
     std::unique_ptr<fcitx::EventSourceTime> recording_animation_timer_;
     std::unique_ptr<fcitx::EventSourceTime> mode_indicator_timer_;
+    std::unique_ptr<fcitx::EventSourceTime> polish_poll_timer_;
     size_t recording_animation_frame_index_ = 0;
     PanelAnimationKind panel_animation_kind_ = PanelAnimationKind::None;
     bool ascii_mode_ = false;
@@ -199,6 +209,11 @@ private:
     fcitx::KeySym pending_shift_toggle_key_ = static_cast<fcitx::KeySym>(0);
     std::string raw_composition_buffer_;
     std::string pending_fallback_text_;
+    bool polish_poll_in_flight_ = false;
+    std::string active_polish_task_id_;
+    std::string active_polish_preview_;
+    std::string active_polish_original_;
+    int active_polish_after_seq_ = 0;
     fcitx::InputContext* last_committed_ic_ = nullptr;
     std::string last_committed_program_;
     std::string last_committed_frontend_;

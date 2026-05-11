@@ -14,6 +14,11 @@ PyYAML>=6.0.0
 # 模型下载 (推荐)
 modelscope==1.30.0
 
+# 远程大模型流式润色
+litellm>=1.65.0
+# SOCKS 代理支持（httpx / litellm 在代理环境下需要）
+socksio>=1.0.0
+
 # 说明：
-# - 默认使用 ONNX 路线；启用本地 SLM 需要 torch（CPU/GPU 版本按需选择）
+# - 默认使用 ONNX 路线；长句润色统一通过 litellm 调用 OpenAI-compatible 流式接口
 # - Rime 相关的 pyrime 由安装脚本按需安装

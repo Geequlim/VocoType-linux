@@ -18,7 +18,7 @@ Fcitx 5
 - `Shift+F9` 长句模式
 - Rime 拼音输入
 - 本地用户词典
-- 可选本地或远程 SLM/LLM 润色
+- 可选 LiteLLM / OpenAI-compatible 流式 SLM/LLM 润色
 
 ## 系统要求
 
@@ -96,7 +96,6 @@ Fcitx 5 会把 addon 配置写到：
 ```json
 {
   "slm": {
-    "provider": "remote",
     "endpoint": "${VOCOTYPE_SLM_ENDPOINT}",
     "model": "${VOCOTYPE_SLM_MODEL}",
     "api_key": "${VOCOTYPE_SLM_API_KEY}"
@@ -122,19 +121,26 @@ Fcitx 5 会把 addon 配置写到：
 {
   "slm": {
     "enabled": true,
-    "provider": "local_ephemeral",
+    "endpoint": "http://127.0.0.1:18080/v1/chat/completions",
     "model": "Qwen/Qwen3.5-0.8B",
-    "local_model": "Qwen/Qwen3.5-0.8B",
-    "warmup_timeout_ms": 90000,
-    "keepalive_ms": 60000,
-    "ready_wait_ms": 2000,
     "timeout_ms": 12000,
+    "stream_idle_timeout_ms": 12000,
+    "transport_timeout_ms": 0,
     "min_chars": 8,
     "max_tokens": 96,
-    "enable_thinking": false
+    "enable_thinking": false,
+    "api_key": "${COMMON_LLM_API_KEY}"
   }
 }
 ```
+
+SLM 统一通过 `litellm` 读取 OpenAI-compatible 流式输出；`stream_idle_timeout_ms`
+按“最近一次收到模型输出”重新计时，持续吐字不会因为总耗时较长而超时。
+`transport_timeout_ms` 默认为 `0`，表示不额外设置 SDK 请求总超时。
+默认会把 `model` 转成 `openai/<model>` 交给 `litellm`；只有需要显式指定
+LiteLLM provider 时，才需要额外写 `litellm_model`。
+`enable_thinking` 作为兼容字段允许保留；通用 OpenAI-compatible 路径不会用它覆盖
+`model`。
 
 ## Rime
 

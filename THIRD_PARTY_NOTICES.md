@@ -12,11 +12,11 @@ Runtime dependencies (from requirements.txt / pyproject.toml):
 - jieba 0.42.1 - https://github.com/fxsjy/jieba
 - PyYAML >=6.0.0 - https://pyyaml.org/
 - modelscope 1.30.0 - https://github.com/modelscope/modelscope
+- litellm >=1.65.0 - https://github.com/BerriAI/litellm
+- socksio >=1.0.0 - https://github.com/sethmlarson/socksio
 
 Optional dependencies:
 - pyrime >=0.2.1 - https://github.com/syccxcc/pyrime
-- torch - https://pytorch.org/
-- transformers - https://github.com/huggingface/transformers
 
 Models (downloaded via ModelScope):
 - iic/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-onnx

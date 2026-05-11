@@ -53,18 +53,14 @@ DEFAULT_UV_PYTHON="3.12"
 
 # SLM 可选配置（默认关闭）
 ENABLE_SLM=0
-SLM_PROVIDER="local_ephemeral"
 SLM_ENDPOINT="http://127.0.0.1:18080/v1/chat/completions"
 SLM_MODEL="Qwen/Qwen3.5-0.8B"
-SLM_LOCAL_MODEL="$SLM_MODEL"
-SLM_LOCAL_PYTHON=""
-SLM_TIMEOUT_MS=600
-SLM_WARMUP_TIMEOUT_MS=12000
+SLM_TIMEOUT_MS=12000
+SLM_STREAM_IDLE_TIMEOUT_MS=12000
+SLM_TRANSPORT_TIMEOUT_MS=0
 SLM_MIN_CHARS=8
-SLM_MAX_TOKENS=24
-SLM_ENABLE_THINKING=0
+SLM_MAX_TOKENS=96
 SLM_API_KEY=""
-SLM_INSTALL_LOCAL_DEPS=0
 
 resolve_python_cmd() {
     local py="$1"
@@ -146,19 +142,16 @@ write_slm_config_json() {
     local config_file="$1"
     local python_bin="$2"
     local enabled="$3"
-    local provider="$4"
-    local endpoint="$5"
-    local model="$6"
-    local local_model="$7"
-    local local_python="$8"
-    local timeout_ms="$9"
-    local min_chars="${10}"
-    local max_tokens="${11}"
-    local warmup_timeout_ms="${12}"
-    local enable_thinking="${13}"
-    local api_key="${14}"
+    local endpoint="$4"
+    local model="$5"
+    local timeout_ms="$6"
+    local stream_idle_timeout_ms="$7"
+    local transport_timeout_ms="$8"
+    local min_chars="$9"
+    local max_tokens="${10}"
+    local api_key="${11}"
 
-    "$python_bin" - "$config_file" "$enabled" "$provider" "$endpoint" "$model" "$local_model" "$local_python" "$timeout_ms" "$min_chars" "$max_tokens" "$warmup_timeout_ms" "$enable_thinking" "$api_key" << 'PY'
+    "$python_bin" - "$config_file" "$enabled" "$endpoint" "$model" "$timeout_ms" "$stream_idle_timeout_ms" "$transport_timeout_ms" "$min_chars" "$max_tokens" "$api_key" << 'PY'
 import json
 import os
 import sys
@@ -178,36 +171,38 @@ def load_json(path: str) -> dict[str, Any]:
 
 target = os.path.expanduser(sys.argv[1])
 enabled = bool(int(sys.argv[2]))
-provider = sys.argv[3]
-endpoint = sys.argv[4]
-model = sys.argv[5]
-local_model = sys.argv[6]
-local_python = sys.argv[7]
-timeout_ms = int(sys.argv[8])
-min_chars = int(sys.argv[9])
-max_tokens = int(sys.argv[10])
-warmup_timeout_ms = int(sys.argv[11])
-enable_thinking = bool(int(sys.argv[12]))
-api_key = sys.argv[13]
+endpoint = sys.argv[3]
+model = sys.argv[4]
+timeout_ms = int(sys.argv[5])
+stream_idle_timeout_ms = int(sys.argv[6])
+transport_timeout_ms = int(sys.argv[7])
+min_chars = int(sys.argv[8])
+max_tokens = int(sys.argv[9])
+api_key = sys.argv[10]
 
 cfg = load_json(target)
 slm = cfg.get("slm", {})
 if not isinstance(slm, dict):
     slm = {}
 
+for obsolete_key in (
+    "provider",
+    "local_model",
+    "local_python",
+    "warmup_timeout_ms",
+):
+    slm.pop(obsolete_key, None)
+
 slm.update(
     {
         "enabled": enabled,
-        "provider": provider,
         "endpoint": endpoint,
         "model": model,
-        "local_model": local_model,
-        "local_python": local_python,
         "timeout_ms": timeout_ms,
-        "warmup_timeout_ms": warmup_timeout_ms,
+        "stream_idle_timeout_ms": stream_idle_timeout_ms,
+        "transport_timeout_ms": transport_timeout_ms,
         "min_chars": min_chars,
         "max_tokens": max_tokens,
-        "enable_thinking": enable_thinking,
         "api_key": api_key,
     }
 )
@@ -217,6 +212,65 @@ os.makedirs(os.path.dirname(target), exist_ok=True)
 with open(target, "w", encoding="utf-8") as f:
     json.dump(cfg, f, ensure_ascii=False, indent=2)
     f.write("\n")
+PY
+}
+
+migrate_existing_slm_config_json() {
+    local config_file="$1"
+    local python_bin="$2"
+
+    "$python_bin" - "$config_file" << 'PY'
+import json
+import os
+import sys
+from typing import Any
+
+
+target = os.path.expanduser(sys.argv[1])
+if not os.path.exists(target):
+    raise SystemExit(0)
+
+try:
+    with open(target, "r", encoding="utf-8") as f:
+        cfg = json.load(f)
+except Exception:
+    raise SystemExit(0)
+
+if not isinstance(cfg, dict):
+    raise SystemExit(0)
+
+slm = cfg.get("slm")
+if not isinstance(slm, dict):
+    raise SystemExit(0)
+
+changed = False
+for obsolete_key in (
+    "provider",
+    "local_model",
+    "local_python",
+    "warmup_timeout_ms",
+):
+    if obsolete_key in slm:
+        slm.pop(obsolete_key, None)
+        changed = True
+
+model = str(slm.get("model", "")).strip()
+litellm_model = str(slm.get("litellm_model", "")).strip()
+legacy_qwen = {"openai/Qwen/Qwen3.5-0.8B", "Qwen/Qwen3.5-0.8B"}
+if litellm_model in legacy_qwen and model and model != "Qwen/Qwen3.5-0.8B":
+    slm.pop("litellm_model", None)
+    changed = True
+elif "litellm_model" in slm and not litellm_model:
+    slm.pop("litellm_model", None)
+    changed = True
+
+if changed:
+    with open(target, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+    print("updated")
+else:
+    print("unchanged")
 PY
 }
 
@@ -236,10 +290,14 @@ ensure_user_dictionary_template() {
     echo "✓ 用户词典模板已创建: $dictionary_file"
 }
 
-restart_running_backend_if_needed() {
+start_or_restart_backend_service() {
     local unit_name="vocotype-fcitx5-backend.service"
 
     if command -v systemctl >/dev/null 2>&1; then
+        if ! systemctl --user daemon-reload >/dev/null 2>&1; then
+            echo "⚠️  systemctl --user daemon-reload 失败，请手动执行"
+        fi
+
         if systemctl --user is-active --quiet "$unit_name"; then
             if systemctl --user restart "$unit_name" >/dev/null 2>&1; then
                 echo "✓ 已重启正在运行的后台服务，使新安装立即生效"
@@ -249,11 +307,37 @@ restart_running_backend_if_needed() {
             fi
             return
         fi
+
+        if pgrep -f "fcitx5_server.py" >/dev/null 2>&1; then
+            pkill -f "fcitx5_server.py" >/dev/null 2>&1 || true
+            sleep 0.5
+        fi
+
+        if systemctl --user enable --now "$unit_name" >/dev/null 2>&1; then
+            echo "✓ 已启用并启动后台服务"
+        else
+            echo "⚠️  后台服务自动启动失败，请手动执行："
+            echo "   systemctl --user daemon-reload"
+            echo "   systemctl --user enable --now $unit_name"
+        fi
+        return
     fi
 
     if pgrep -f "fcitx5_server.py" >/dev/null 2>&1; then
-        echo "⚠️  检测到已有后台进程正在运行，但未由 systemd 管理。"
-        echo "   请手动重启该进程，否则新安装不会立即生效。"
+        pkill -f "fcitx5_server.py" >/dev/null 2>&1 || true
+        sleep 0.5
+    fi
+
+    nohup "$HOME/.local/bin/vocotype-fcitx5-backend" \
+        > "$HOME/.local/share/vocotype-fcitx5/backend.log" 2>&1 &
+    local backend_pid=$!
+    sleep 0.5
+    if kill -0 "$backend_pid" >/dev/null 2>&1 ||
+        pgrep -f "fcitx5_server.py" >/dev/null 2>&1; then
+        echo "✓ 已在后台启动 VoCoType 服务"
+    else
+        echo "⚠️  后台服务自动启动失败，请手动执行："
+        echo "   $HOME/.local/bin/vocotype-fcitx5-backend"
     fi
 }
 
@@ -267,7 +351,7 @@ if [ -f "$FCITX5_BACKEND_CONFIG" ]; then
     echo "如需调整，请手动编辑该文件。"
 else
     echo "是否启用长句 SLM 润色（Shift+F9）？"
-    echo "  [1] 不启用（默认）- 不安装 SLM 模型，保持最低资源占用"
+    echo "  [1] 不启用（默认）- 不调用大模型，保持最低资源占用"
     echo "  [2] 启用 - 配置 SLM 润色"
     echo ""
     read -r -p "请输入选项 (默认 1): " SLM_CHOICE
@@ -276,43 +360,26 @@ else
             ENABLE_SLM=1
             echo ""
             echo "您选择启用 SLM 润色。"
-            echo "请选择 SLM 运行方式："
-            echo "  [1] 本地一次性加载（推荐）：按下 Shift+F9 预加载，润色后释放"
-            echo "  [2] 远程 HTTP 服务：调用已有 endpoint（OpenAI 兼容）"
-            read -r -p "请输入选项 (默认 1): " SLM_PROVIDER_CHOICE
+            echo "当前只保留 LiteLLM 流式润色，需提供 OpenAI-compatible endpoint。"
+            read -r -p "SLM 模型名 (默认 $SLM_MODEL): " SLM_MODEL_INPUT
+            if [ -n "$SLM_MODEL_INPUT" ]; then
+                SLM_MODEL="$SLM_MODEL_INPUT"
+                SLM_LITELLM_MODEL="openai/$SLM_MODEL"
+            fi
 
-            if [ "$SLM_PROVIDER_CHOICE" = "2" ]; then
-                SLM_PROVIDER="remote"
-                read -r -p "SLM 模型名 (默认 $SLM_MODEL): " SLM_MODEL_INPUT
-                if [ -n "$SLM_MODEL_INPUT" ]; then
-                    SLM_MODEL="$SLM_MODEL_INPUT"
-                fi
+            read -r -p "LiteLLM 模型名 (默认 $SLM_LITELLM_MODEL): " SLM_LITELLM_MODEL_INPUT
+            if [ -n "$SLM_LITELLM_MODEL_INPUT" ]; then
+                SLM_LITELLM_MODEL="$SLM_LITELLM_MODEL_INPUT"
+            fi
 
-                read -r -p "SLM Endpoint (默认 $SLM_ENDPOINT): " SLM_ENDPOINT_INPUT
-                if [ -n "$SLM_ENDPOINT_INPUT" ]; then
-                    SLM_ENDPOINT="$SLM_ENDPOINT_INPUT"
-                fi
-                read -r -s -p "SLM API Key（可留空，输入时不回显）: " SLM_API_KEY_INPUT
-                echo ""
-                if [ -n "$SLM_API_KEY_INPUT" ]; then
-                    SLM_API_KEY="$SLM_API_KEY_INPUT"
-                fi
-            else
-                SLM_PROVIDER="local_ephemeral"
-                SLM_TIMEOUT_MS=12000
-                SLM_WARMUP_TIMEOUT_MS=90000
-                SLM_MAX_TOKENS=96
-                SLM_ENABLE_THINKING=0
-                SLM_API_KEY=""
-                read -r -p "本地模型名/路径 (默认 $SLM_LOCAL_MODEL): " SLM_LOCAL_MODEL_INPUT
-                if [ -n "$SLM_LOCAL_MODEL_INPUT" ]; then
-                    SLM_LOCAL_MODEL="$SLM_LOCAL_MODEL_INPUT"
-                    SLM_MODEL="$SLM_LOCAL_MODEL_INPUT"
-                fi
-                read -r -p "是否安装本地 SLM 依赖（torch/transformers/sentencepiece/socksio）? (Y/n): " INSTALL_SLM_DEPS
-                if [[ ! "$INSTALL_SLM_DEPS" =~ ^[Nn]$ ]]; then
-                    SLM_INSTALL_LOCAL_DEPS=1
-                fi
+            read -r -p "SLM Endpoint (默认 $SLM_ENDPOINT): " SLM_ENDPOINT_INPUT
+            if [ -n "$SLM_ENDPOINT_INPUT" ]; then
+                SLM_ENDPOINT="$SLM_ENDPOINT_INPUT"
+            fi
+            read -r -s -p "SLM API Key（可留空，输入时不回显）: " SLM_API_KEY_INPUT
+            echo ""
+            if [ -n "$SLM_API_KEY_INPUT" ]; then
+                SLM_API_KEY="$SLM_API_KEY_INPUT"
             fi
             ;;
         ""|1|*)
@@ -591,10 +658,12 @@ if [ "$USE_SYSTEM_PYTHON" = "1" ]; then
     if ! "$PYTHON" - << 'PY' >/dev/null 2>&1
 import jieba  # noqa: F401
 import librosa  # noqa: F401
+import litellm  # noqa: F401
 import modelscope  # noqa: F401
 import pyrime  # noqa: F401
 import sounddevice  # noqa: F401
 import soundfile  # noqa: F401
+import socksio  # noqa: F401
 import funasr_onnx  # noqa: F401
 PY
     then
@@ -617,42 +686,28 @@ fi
 
 echo "✓ Python 环境已配置"
 
-if [ "$ENABLE_SLM" = "1" ] && [ "$SLM_PROVIDER" = "local_ephemeral" ] && [ "$SLM_INSTALL_LOCAL_DEPS" = "1" ]; then
-    echo ""
-    echo "安装本地 SLM 依赖（torch/transformers/sentencepiece/socksio）..."
-    if [ "$USE_SYSTEM_PYTHON" = "1" ]; then
-        if ! "$PYTHON" -c "import torch, transformers, sentencepiece, socksio" >/dev/null 2>&1; then
-            echo "⚠️  系统 Python 缺少本地 SLM 依赖，请手动安装："
-            echo "  $PYTHON -m pip install torch transformers sentencepiece socksio"
-            echo "   或改用虚拟环境重新安装。"
-        fi
-    elif command -v uv &>/dev/null; then
-        uv pip install torch transformers sentencepiece socksio --python "$PYTHON"
-    else
-        "$PYTHON" -m pip install torch transformers sentencepiece socksio
-    fi
-fi
-
 echo ""
 echo "[可选] 写入 SLM 配置..."
 if [ -f "$FCITX5_BACKEND_CONFIG" ]; then
-    echo "✓ 检测到已有配置，已跳过写入: $FCITX5_BACKEND_CONFIG"
+    migration_status=$(migrate_existing_slm_config_json "$FCITX5_BACKEND_CONFIG" "$PYTHON" || true)
+    if [ "$migration_status" = "updated" ]; then
+        echo "✓ 已保留已有配置并清理旧 SLM 字段: $FCITX5_BACKEND_CONFIG"
+    else
+        echo "✓ 检测到已有配置，已跳过写入: $FCITX5_BACKEND_CONFIG"
+    fi
     echo "  如需修改 SLM / logging / backend 配置，请手动编辑该文件。"
 else
     write_slm_config_json \
         "$FCITX5_BACKEND_CONFIG" \
         "$PYTHON" \
         "$ENABLE_SLM" \
-        "$SLM_PROVIDER" \
         "$SLM_ENDPOINT" \
         "$SLM_MODEL" \
-        "$SLM_LOCAL_MODEL" \
-        "$SLM_LOCAL_PYTHON" \
         "$SLM_TIMEOUT_MS" \
+        "$SLM_STREAM_IDLE_TIMEOUT_MS" \
+        "$SLM_TRANSPORT_TIMEOUT_MS" \
         "$SLM_MIN_CHARS" \
         "$SLM_MAX_TOKENS" \
-        "$SLM_WARMUP_TIMEOUT_MS" \
-        "$SLM_ENABLE_THINKING" \
         "$SLM_API_KEY"
     echo "✓ 已写入配置: $FCITX5_BACKEND_CONFIG"
 fi
@@ -944,12 +999,7 @@ Environment="PYTHONIOENCODING=UTF-8"
 WantedBy=default.target
 EOF
 
-if command -v systemctl >/dev/null 2>&1; then
-    systemctl --user daemon-reload >/dev/null 2>&1 || \
-        echo "⚠️  systemctl --user daemon-reload 失败，请手动执行"
-fi
-
-restart_running_backend_if_needed
+start_or_restart_backend_service
 
 echo "✓ 后台服务启动器已创建"
 if [ "$PYTHON" = "$PROJECT_DIR/.venv/bin/python" ]; then

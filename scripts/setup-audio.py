@@ -46,15 +46,38 @@ def list_audio_devices() -> list[tuple[int, dict]]:
     return input_devices
 
 
+def get_default_input_device_id(devices: list[tuple[int, dict]]) -> int | None:
+    """Return the preferred default input device id.
+
+    Prefer the explicit PulseAudio/PipeWire "default" device when present,
+    because it follows the desktop's currently selected microphone. Fall back
+    to sounddevice's default input index if it is a valid input device.
+    """
+
+    for idx, dev in devices:
+        if str(dev.get("name", "")).strip().lower() == "default":
+            return idx
+
+    try:
+        default_input = sd.default.device[0]
+    except Exception:
+        return None
+
+    for idx, _dev in devices:
+        if idx == default_input:
+            return idx
+    return None
+
+
 def display_devices(devices: list[tuple[int, dict]]) -> None:
     """显示设备列表"""
     print_header("可用的音频输入设备")
     print()
 
-    default_input = sd.default.device[0]
+    default_input = get_default_input_device_id(devices)
 
     for idx, dev in devices:
-        marker = " ← 系统默认" if idx == default_input else ""
+        marker = " ← 默认" if idx == default_input else ""
         print(f"  [{idx}] {dev['name']}")
         print(f"      输入通道: {dev['max_input_channels']}, "
               f"采样率: {int(dev['default_samplerate'])}Hz{marker}")
@@ -63,14 +86,27 @@ def display_devices(devices: list[tuple[int, dict]]) -> None:
 
 def select_device(devices: list[tuple[int, dict]]) -> tuple[str, int] | None:
     """让用户选择设备，返回 (设备名称, 采样率) 或 None 表示退出"""
+    default_input = get_default_input_device_id(devices)
+
     while True:
         try:
-            choice = input("请输入设备编号 (q=退出): ").strip().lower()
+            prompt = (
+                f"请输入设备编号 (默认 {default_input}, q=退出): "
+                if default_input is not None
+                else "请输入设备编号 (q=退出): "
+            )
+            choice = input(prompt).strip().lower()
 
             if choice in ('q', 'quit', 'exit'):
                 return None
 
-            device_id = int(choice)
+            if choice == "":
+                if default_input is None:
+                    print("❌ 没有可用默认设备，请输入设备编号或 'q' 退出")
+                    continue
+                device_id = default_input
+            else:
+                device_id = int(choice)
 
             # 检查是否在可用列表中
             for idx, dev in devices:
