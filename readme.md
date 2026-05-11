@@ -2,7 +2,7 @@
 
 Linux 离线语音输入法，当前仅维护 **Fcitx 5** 版本。
 
-<video src="screenshots/video.mp4" controls width="720"></video>
+<img src="screenshots/video.gif" alt="VoCoType 演示" width="1080">
 
 这个仓库已经从早期的双前端形态收敛为 **fcitx5-only** 项目：后续只保留 `fcitx5/` 方案，不再继续维护 `ibus` 相关代码、脚本和文档。
 
@@ -23,11 +23,6 @@ Linux 离线语音输入法，当前仅维护 **Fcitx 5** 版本。
 - 与 Fcitx 5 Rime 配合使用，语音和拼音共存
 - 共享用户词典：`~/.config/vocotype/user-dictionary.yaml`
 
-## 演示
-
-<img src="screenshots/video.gif" alt="VoCoType 演示" width="1080">
-
-也可以直接打开 [MP4 演示视频](screenshots/video.mp4) 查看原始版本。
 
 ## 快速开始
 
