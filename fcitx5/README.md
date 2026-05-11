@@ -15,7 +15,8 @@ Fcitx 5
 ## 功能
 
 - `F9` 按住说话，松开提交
-- `Shift+F9` 长句模式
+- 可在输入法配置面板中设置 AI 润色默认开启和触发字数
+- `Shift+F9` 临时反向切换本次录音是否 AI 润色
 - Rime 拼音输入
 - 本地用户词典
 - 可选 LiteLLM / OpenAI-compatible 流式 SLM/LLM 润色
@@ -72,12 +73,24 @@ Fcitx 5 会把 addon 配置写到：
 ~/.config/fcitx5/inputmethod/vocotype.conf
 ```
 
+也可以在 Fcitx 配置工具中直接调整常用选项：
+
+![VoCoType Fcitx 配置面板](../screenshots/fcitx5-panel.png)
+
 常用配置项：
 
 - `PTTKey`：默认 `F9`
 - `PTTHoldThresholdMs`：按住多久后开始录音
-- `LongModeModifier`：默认 `Shift`
+- `PolishByDefault`：普通录音是否默认启用 AI 润色，默认开启
+- `PolishMinChars`：ASR 文本达到多少字才调用 AI 润色，默认 `16`
+- `PolishTimeoutMs`：AI 润色流式输出空闲超时，默认 `12000`
+- `EnableThinking`：是否允许模型 thinking / reasoning 输出，默认关闭
+- `LongModeModifier`：AI 润色临时切换修饰键，默认 `Shift`
 - `StripTrailingPeriodOnCommit`：提交前去尾部句号
+
+当 `PolishByDefault=true` 时，直接按 `F9` 会在达到 `PolishMinChars` 后尝试润色；
+按住 `Shift+F9` 会临时跳过本次润色。当 `PolishByDefault=false` 时行为相反：
+直接 `F9` 只识别，`Shift+F9` 临时启用润色。
 
 修改后重启 `fcitx5` 即可生效。
 
@@ -115,7 +128,7 @@ Fcitx 5 会把 addon 配置写到：
 }
 ```
 
-### 启用长句模式 SLM
+### 启用 SLM / AI 润色能力
 
 ```json
 {
@@ -123,24 +136,16 @@ Fcitx 5 会把 addon 配置写到：
     "enabled": true,
     "endpoint": "http://127.0.0.1:18080/v1/chat/completions",
     "model": "Qwen/Qwen3.5-0.8B",
-    "timeout_ms": 12000,
-    "stream_idle_timeout_ms": 12000,
-    "transport_timeout_ms": 0,
-    "min_chars": 8,
-    "max_tokens": 96,
-    "enable_thinking": false,
     "api_key": "${COMMON_LLM_API_KEY}"
   }
 }
 ```
 
-SLM 统一通过 `litellm` 读取 OpenAI-compatible 流式输出；`stream_idle_timeout_ms`
-按“最近一次收到模型输出”重新计时，持续吐字不会因为总耗时较长而超时。
-`transport_timeout_ms` 默认为 `0`，表示不额外设置 SDK 请求总超时。
+SLM 统一通过 `litellm` 读取 OpenAI-compatible 流式输出。
 默认会把 `model` 转成 `openai/<model>` 交给 `litellm`；只有需要显式指定
 LiteLLM provider 时，才需要额外写 `litellm_model`。
-`enable_thinking` 作为兼容字段允许保留；通用 OpenAI-compatible 路径不会用它覆盖
-`model`。
+`max_tokens` 不再默认传给大模型，避免长文本润色被固定输出上限截断。
+触发字数、流式空闲超时与 thinking 开关在输入法配置面板中调整。
 
 ## Rime
 

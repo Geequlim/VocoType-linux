@@ -114,14 +114,20 @@ TranscribeResult IPCClient::transcribeAudio(const std::string& audio_path, bool 
 }
 
 TranscribeStartResult IPCClient::startTranscription(const std::string& audio_path,
-                                                    bool long_mode) {
+                                                    bool polish_enabled,
+                                                    int polish_min_chars,
+                                                    int polish_timeout_ms,
+                                                    bool enable_thinking) {
     TranscribeStartResult result;
 
     try {
         json request = {
             {"type", "transcribe_start"},
             {"audio_path", audio_path},
-            {"long_mode", long_mode}
+            {"long_mode", polish_enabled},
+            {"polish_min_chars", polish_min_chars},
+            {"polish_timeout_ms", polish_timeout_ms},
+            {"enable_thinking", enable_thinking}
         };
 
         std::string response_str = sendRequest(request.dump());

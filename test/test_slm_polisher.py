@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 import sys
+import types
 
 
 MODULE_PATH = Path(__file__).resolve().parents[1] / "app" / "slm_polisher.py"
@@ -50,6 +51,27 @@ def test_too_short_stream_returns_original():
     assert metrics.reason == "too_short"
 
 
+def test_min_chars_override_controls_polish_threshold():
+    polisher = SLMPolisher({"enabled": True, "min_chars": 20})
+
+    assert polisher.should_polish("八个字以上文本", long_mode=True) is False
+    assert (
+        polisher.should_polish(
+            "八个字以上文本",
+            long_mode=True,
+            min_chars=4,
+        )
+        is True
+    )
+    assert list(
+        polisher.stream_polish(
+            "短文本",
+            long_mode=True,
+            min_chars=10,
+        )
+    ) == [{"kind": "final", "text": "短文本", "reason": "too_short"}]
+
+
 def test_stream_polish_litellm_chunks(monkeypatch):
     polisher = SLMPolisher(
         {
@@ -60,7 +82,7 @@ def test_stream_polish_litellm_chunks(monkeypatch):
         }
     )
 
-    def _fake_stream(text):
+    def _fake_stream(text, **_kwargs):
         assert text == "原始文本"
         return [
             {"choices": [{"delta": {"content": "润色后"}}]},
@@ -86,7 +108,7 @@ def test_stream_polish_litellm_chunks(monkeypatch):
 def test_stream_polish_keeps_alive_on_empty_chunks(monkeypatch):
     polisher = SLMPolisher({"enabled": True, "min_chars": 1})
 
-    def _fake_stream(_text):
+    def _fake_stream(_text, **_kwargs):
         return [
             {"choices": [{"delta": {"role": "assistant"}}]},
             {"choices": [{"delta": {"content": "润色结果"}}]},
@@ -103,7 +125,7 @@ def test_stream_polish_keeps_alive_on_empty_chunks(monkeypatch):
 def test_stream_error_when_litellm_fails(monkeypatch):
     polisher = SLMPolisher({"enabled": True, "min_chars": 1})
 
-    def _fail(_text):
+    def _fail(_text, **_kwargs):
         raise RuntimeError("network failed")
 
     monkeypatch.setattr(polisher, "_create_litellm_stream", _fail)
@@ -168,6 +190,45 @@ def test_openrouter_enable_thinking_false_maps_to_reasoning_extra_body():
         "reasoning": {"effort": "none", "exclude": True},
         "include_reasoning": False,
     }
+
+
+def test_enable_thinking_request_override_takes_precedence():
+    polisher = SLMPolisher(
+        {
+            "enabled": True,
+            "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+            "model": "deepseek/deepseek-v4-flash",
+            "enable_thinking": False,
+        }
+    )
+
+    assert polisher._request_extra_body(enable_thinking=True) == {
+        "reasoning": {"enabled": True},
+    }
+
+
+def test_create_litellm_stream_does_not_send_max_tokens(monkeypatch):
+    captured = {}
+    fake_litellm = types.ModuleType("litellm")
+
+    def _completion(**kwargs):
+        captured.update(kwargs)
+        return []
+
+    fake_litellm.completion = _completion
+    monkeypatch.setitem(sys.modules, "litellm", fake_litellm)
+
+    polisher = SLMPolisher(
+        {
+            "enabled": True,
+            "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+            "model": "deepseek/deepseek-v4-flash",
+            "max_tokens": 512,
+        }
+    )
+
+    assert list(polisher._create_litellm_stream("原始文本")) == []
+    assert "max_tokens" not in captured
 
 
 def test_extract_stream_delta_accepts_message_content():

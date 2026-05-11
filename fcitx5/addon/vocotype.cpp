@@ -296,12 +296,20 @@ void VoCoTypeAddon::applyHotkeyConfig() {
     ptt_hold_threshold_ms_ = config_.pttHoldThresholdMs.value();
     long_mode_modifier_ = modifier_state;
     long_mode_modifier_name_ = long_mode_modifier.toString();
+    polish_by_default_ = config_.polishByDefault.value();
+    polish_min_chars_ = std::max(1, config_.polishMinChars.value());
+    polish_timeout_ms_ = std::max(1000, config_.polishTimeoutMs.value());
+    enable_thinking_ = config_.enableThinking.value();
     strip_trailing_period_on_commit_ =
         config_.stripTrailingPeriodOnCommit.value();
 
     FCITX_INFO() << "Fcitx5 热键配置: ptt=" << ptt_key_name_
                  << ", long_mode_modifier=" << long_mode_modifier_name_
                  << ", ptt_hold_threshold_ms=" << ptt_hold_threshold_ms_
+                 << ", polish_by_default=" << polish_by_default_
+                 << ", polish_min_chars=" << polish_min_chars_
+                 << ", polish_timeout_ms=" << polish_timeout_ms_
+                 << ", enable_thinking=" << enable_thinking_
                  << ", strip_trailing_period_on_commit="
                  << strip_trailing_period_on_commit_;
 }
@@ -565,6 +573,11 @@ void VoCoTypeAddon::showModeIndicator(fcitx::InputContext* ic,
             return false;
         });
     mode_indicator_timer_->setOneShot();
+}
+
+bool VoCoTypeAddon::polishModeForStates(fcitx::KeyStates states) const {
+    const bool modifier_active = bool(states & long_mode_modifier_);
+    return polish_by_default_ ? !modifier_active : modifier_active;
 }
 
 bool VoCoTypeAddon::handleUnhandledSpace(fcitx::InputContext* ic,
@@ -935,15 +948,15 @@ void VoCoTypeAddon::keyEvent(const fcitx::InputMethodEntry& entry,
                 recording_long_mode_ = !recording_long_mode_;
                 if (recording_long_mode_) {
                     startLongRecordingAnimation(ic);
-                    FCITX_INFO() << "Recording toggled to long mode via modifier key";
+                    FCITX_INFO() << "Recording toggled to polish mode via modifier key";
                 } else {
                     startRecordingAnimation(ic);
-                    FCITX_INFO() << "Recording toggled to normal mode via modifier key";
+                    FCITX_INFO() << "Recording toggled to plain mode via modifier key";
                 }
             } else {
                 pending_long_mode_ = !pending_long_mode_;
                 FCITX_INFO() << "Pending recording toggled to "
-                             << (pending_long_mode_ ? "long" : "normal")
+                             << (pending_long_mode_ ? "polish" : "plain")
                              << " mode via modifier key";
             }
         }
@@ -1026,7 +1039,7 @@ void VoCoTypeAddon::keyEvent(const fcitx::InputMethodEntry& entry,
                 cancelPendingRecordingStart();
             }
         } else {
-            const bool long_mode = bool(key.states() & long_mode_modifier_);
+            const bool long_mode = polishModeForStates(key.states());
             if (!is_recording_ && !ptt_pressed_) {
                 pending_ptt_states_ = key.states();
                 armPendingRecordingStart(ic, long_mode);
@@ -1168,7 +1181,7 @@ void VoCoTypeAddon::startRecording(fcitx::InputContext* ic, bool long_mode) {
         startRecordingAnimation(ic);
     }
 
-    FCITX_INFO() << "Recording started, mode=" << (long_mode ? "long" : "normal");
+    FCITX_INFO() << "Recording started, mode=" << (long_mode ? "polish" : "plain");
 }
 
 void VoCoTypeAddon::stopAndTranscribe(fcitx::InputContext* ic) {
@@ -1233,7 +1246,12 @@ void VoCoTypeAddon::stopRecording(fcitx::InputContext* ic, bool transcribe) {
 
         if (long_mode) {
             TranscribeStartResult result =
-                ipc_client_->startTranscription(audio_path, long_mode);
+                ipc_client_->startTranscription(
+                    audio_path,
+                    long_mode,
+                    polish_min_chars_,
+                    polish_timeout_ms_,
+                    enable_thinking_);
             if (!result.success || result.task_id.empty()) {
                 std::remove(audio_path.c_str());
             }
@@ -1275,7 +1293,7 @@ void VoCoTypeAddon::stopRecording(fcitx::InputContext* ic, bool transcribe) {
             });
     }).detach();
 
-    FCITX_INFO() << "Recording stopped, mode=" << (long_mode ? "long" : "normal");
+    FCITX_INFO() << "Recording stopped, mode=" << (long_mode ? "polish" : "plain");
 }
 
 void VoCoTypeAddon::updateUI(fcitx::InputContext* ic, const RimeUIState& state) {

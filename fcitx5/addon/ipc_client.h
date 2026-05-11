@@ -97,7 +97,10 @@ public:
     TranscribeResult transcribeAudio(const std::string& audio_path, bool long_mode = false);
 
     TranscribeStartResult startTranscription(const std::string& audio_path,
-                                             bool long_mode = false);
+                                             bool polish_enabled = false,
+                                             int polish_min_chars = 0,
+                                             int polish_timeout_ms = 0,
+                                             bool enable_thinking = false);
 
     PolishPollResult pollPolishTask(const std::string& task_id, int after_seq);
 

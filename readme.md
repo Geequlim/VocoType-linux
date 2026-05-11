@@ -2,6 +2,8 @@
 
 Linux 离线语音输入法，当前仅维护 **Fcitx 5** 版本。
 
+<video src="screenshots/video.mp4" controls width="720"></video>
+
 这个仓库已经从早期的双前端形态收敛为 **fcitx5-only** 项目：后续只保留 `fcitx5/` 方案，不再继续维护 `ibus` 相关代码、脚本和文档。
 
 ## 这个 fork 的主要改动
@@ -16,7 +18,8 @@ Linux 离线语音输入法，当前仅维护 **Fcitx 5** 版本。
 
 - 本地离线语音识别，不上传音频
 - `F9` 按住说话，松开提交
-- `Shift+F9` 长句模式，可选 SLM/LLM 润色
+- AI 润色可在输入法配置面板中默认开启，并按字数阈值触发
+- `Shift+F9` 临时反向切换本次录音是否 AI 润色
 - 与 Fcitx 5 Rime 配合使用，语音和拼音共存
 - 共享用户词典：`~/.config/vocotype/user-dictionary.yaml`
 
@@ -39,6 +42,10 @@ fcitx5 -r
 5. 可选写入 Rime 和 SLM 配置
 
 安装完成后，在 `fcitx5-configtool` 中添加 `VoCoType` 输入法。
+
+输入法配置面板可以直接调整 AI 润色默认开关、触发字数、超时和 thinking 开关：
+
+![VoCoType Fcitx 配置面板](screenshots/fcitx5-panel.png)
 
 ## 目录结构
 
@@ -64,7 +71,7 @@ VoCoType Linux
 ## 使用说明
 
 - `F9`：极速模式，仅 ASR + 标点
-- `Shift+F9`：长句模式，按配置触发 SLM/LLM 润色
+- `Shift+F9`：临时反向切换本次录音是否 AI 润色
 - 普通键盘输入：走 Fcitx 5 / Rime
 
 当前仓库不再提供 IBus 版的 `Ctrl+F9` 语音编辑链路。

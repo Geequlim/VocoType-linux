@@ -2,8 +2,8 @@
  * VoCoType Fcitx5 Addon
  *
  * 语音 + Rime 拼音输入法
- * - F9: 按住录音，松开识别（极速模式）
- * - Shift+F9: 长句模式，松开后识别并可选 SLM 润色
+ * - F9: 按住录音，松开识别；是否 AI 润色由配置决定
+ * - Shift+F9: 临时反向切换本次录音是否 AI 润色
  * - 其他键: Rime 拼音输入
  */
 
@@ -44,10 +44,32 @@ FCITX_CONFIGURATION(VoCoTypeInputMethodConfig,
     fcitx::Option<fcitx::Key, fcitx::KeyConstrain> longModeModifier{
         this,
         "LongModeModifier",
-        "长句模式修饰键",
+        "AI 润色临时切换修饰键",
         fcitx::Key(FcitxKey_Shift_L),
         fcitx::KeyConstrain({fcitx::KeyConstrainFlag::AllowModifierLess,
                      fcitx::KeyConstrainFlag::AllowModifierOnly})};
+    fcitx::Option<bool> polishByDefault{
+        this,
+        "PolishByDefault",
+        "默认启用 AI 润色",
+        true};
+    fcitx::Option<int, fcitx::IntConstrain> polishMinChars{
+        this,
+        "PolishMinChars",
+        "AI 润色最少字数",
+        16,
+        fcitx::IntConstrain(1, 2000)};
+    fcitx::Option<int, fcitx::IntConstrain> polishTimeoutMs{
+        this,
+        "PolishTimeoutMs",
+        "AI 润色超时（毫秒）",
+        12000,
+        fcitx::IntConstrain(1000, 120000)};
+    fcitx::Option<bool> enableThinking{
+        this,
+        "EnableThinking",
+        "启用模型 thinking 输出",
+        false};
     fcitx::Option<bool> stripTrailingPeriodOnCommit{
         this,
         "StripTrailingPeriodOnCommit",
@@ -110,6 +132,7 @@ private:
                                     bool is_release);
     void clearRawCompositionBuffer();
     void showModeIndicator(fcitx::InputContext* ic, const std::string& indicator);
+    bool polishModeForStates(fcitx::KeyStates states) const;
     void replayShortTapAsRegularKey(fcitx::InputContext* ic);
     bool handleUnhandledSpace(fcitx::InputContext* ic, const char* reason);
     bool injectUnhandledSpaceWithXdotool(fcitx::InputContext* ic,
@@ -192,6 +215,10 @@ private:
     std::string ptt_key_name_ = "F9";
     int ptt_hold_threshold_ms_ = 0;
     std::string long_mode_modifier_name_ = "Shift";
+    bool polish_by_default_ = true;
+    int polish_min_chars_ = 16;
+    int polish_timeout_ms_ = 12000;
+    bool enable_thinking_ = false;
     bool strip_trailing_period_on_commit_ = false;
     bool ptt_pressed_ = false;
     bool pending_long_mode_ = false;

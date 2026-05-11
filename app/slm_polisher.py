@@ -96,8 +96,7 @@ class SLMPolisher:
         )
         self.timeout_ms = int(cfg.get("timeout_ms", 12000))
         self.transport_timeout_ms = max(0, int(cfg.get("transport_timeout_ms", 0)))
-        self.min_chars = max(1, int(cfg.get("min_chars", 8)))
-        self.max_tokens = max(1, int(cfg.get("max_tokens", 96)))
+        self.min_chars = max(1, int(cfg.get("min_chars", 16)))
         self.temperature = float(cfg.get("temperature", 0.0))
         self.top_p = float(cfg.get("top_p", 0.9))
         self.api_key = str(cfg.get("api_key", "")).strip()
@@ -106,10 +105,24 @@ class SLMPolisher:
         extra_body = cfg.get("extra_body", {})
         self.extra_body = dict(extra_body) if isinstance(extra_body, dict) else {}
 
-    def should_polish(self, text: str, *, long_mode: bool) -> bool:
-        return self.enabled and long_mode and len((text or "").strip()) >= self.min_chars
+    def should_polish(
+        self,
+        text: str,
+        *,
+        long_mode: bool,
+        min_chars: int | None = None,
+    ) -> bool:
+        threshold = self._effective_min_chars(min_chars)
+        return self.enabled and long_mode and len((text or "").strip()) >= threshold
 
-    def stream_polish(self, text: str, *, long_mode: bool) -> Iterator[Dict[str, Any]]:
+    def stream_polish(
+        self,
+        text: str,
+        *,
+        long_mode: bool,
+        min_chars: int | None = None,
+        enable_thinking: bool | None = None,
+    ) -> Iterator[Dict[str, Any]]:
         """Yield normalized streaming events for the input panel."""
 
         original = text or ""
@@ -122,7 +135,7 @@ class SLMPolisher:
             return
 
         stripped = original.strip()
-        if len(stripped) < self.min_chars:
+        if len(stripped) < self._effective_min_chars(min_chars):
             yield {"kind": "final", "text": original, "reason": "too_short"}
             return
 
@@ -133,7 +146,10 @@ class SLMPolisher:
             chunk_count = 0
             content_chunk_count = 0
             for chunk in self._iter_litellm_chunks(
-                self._create_litellm_stream(stripped)
+                self._create_litellm_stream(
+                    stripped,
+                    enable_thinking=enable_thinking,
+                )
             ):
                 chunk_count += 1
                 delta = self._extract_stream_delta(chunk)
@@ -210,7 +226,12 @@ class SLMPolisher:
             reason=reason,
         )
 
-    def _create_litellm_stream(self, stripped: str) -> Any:
+    def _create_litellm_stream(
+        self,
+        stripped: str,
+        *,
+        enable_thinking: bool | None = None,
+    ) -> Any:
         from litellm import completion
 
         kwargs: Dict[str, Any] = {
@@ -221,26 +242,30 @@ class SLMPolisher:
                 {"role": "system", "content": self.system_prompt},
                 {"role": "user", "content": f"原文：{stripped}\n输出："},
             ],
-            "max_tokens": self.max_tokens,
             "temperature": self.temperature,
             "top_p": self.top_p,
             "stream": True,
         }
         if self.transport_timeout_ms > 0:
             kwargs["timeout"] = max(0.05, self.transport_timeout_ms / 1000.0)
-        extra_body = self._request_extra_body()
+        extra_body = self._request_extra_body(enable_thinking=enable_thinking)
         if extra_body:
             kwargs["extra_body"] = extra_body
         return completion(**kwargs)
 
-    def _request_extra_body(self) -> Dict[str, Any]:
+    def _request_extra_body(
+        self,
+        *,
+        enable_thinking: bool | None = None,
+    ) -> Dict[str, Any]:
         extra_body = dict(self.extra_body)
-        if self.enable_thinking is None:
+        thinking_enabled = self.enable_thinking if enable_thinking is None else enable_thinking
+        if thinking_enabled is None:
             return extra_body
 
         api_base = self._remote_api_base().lower()
         if "openrouter.ai" in api_base:
-            if self.enable_thinking:
+            if thinking_enabled:
                 extra_body.setdefault("reasoning", {"enabled": True})
             else:
                 extra_body.setdefault(
@@ -250,8 +275,13 @@ class SLMPolisher:
                 extra_body.setdefault("include_reasoning", False)
             return extra_body
 
-        extra_body.setdefault("enable_thinking", self.enable_thinking)
+        extra_body.setdefault("enable_thinking", thinking_enabled)
         return extra_body
+
+    def _effective_min_chars(self, override: int | None) -> int:
+        if override is None:
+            return self.min_chars
+        return max(1, int(override))
 
     def _remote_api_base(self) -> str:
         parsed = urllib.parse.urlparse(self.endpoint)

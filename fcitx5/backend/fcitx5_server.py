@@ -42,6 +42,9 @@ TASK_TTL_S = 300.0
 class StreamTask:
     task_id: str
     long_mode: bool
+    polish_min_chars: int = 0
+    polish_timeout_ms: int = 0
+    enable_thinking: bool | None = None
     created_at: float = field(default_factory=time.monotonic)
     last_event_at: float = field(default_factory=time.monotonic)
     status: str = "running"
@@ -110,11 +113,16 @@ class StreamTask:
     def snapshot(self, after_seq: int, idle_timeout_s: float) -> dict:
         with self.lock:
             now = time.monotonic()
+            effective_idle_timeout_s = (
+                max(0.1, self.polish_timeout_ms / 1000.0)
+                if self.polish_timeout_ms > 0
+                else idle_timeout_s
+            )
             if (
                 self.status == "running"
                 and self.phase == "polishing"
-                and idle_timeout_s > 0
-                and now - self.last_event_at > idle_timeout_s
+                and effective_idle_timeout_s > 0
+                and now - self.last_event_at > effective_idle_timeout_s
             ):
                 self.cancelled = True
                 self._mark_error_locked("SLM 调用失败：长时间未收到模型输出", "idle_timeout")
@@ -295,8 +303,21 @@ class Fcitx5Backend:
                 logger.warning("清理 socket 失败: %s", exc)
             logger.info("Fcitx5 Backend 已停止")
 
-    def _start_stream_task(self, audio_path: str, long_mode: bool) -> StreamTask:
-        task = StreamTask(task_id=uuid.uuid4().hex, long_mode=long_mode)
+    def _start_stream_task(
+        self,
+        audio_path: str,
+        long_mode: bool,
+        polish_min_chars: int = 0,
+        polish_timeout_ms: int = 0,
+        enable_thinking: bool | None = None,
+    ) -> StreamTask:
+        task = StreamTask(
+            task_id=uuid.uuid4().hex,
+            long_mode=long_mode,
+            polish_min_chars=max(0, int(polish_min_chars or 0)),
+            polish_timeout_ms=max(0, int(polish_timeout_ms or 0)),
+            enable_thinking=enable_thinking,
+        )
         with self._stream_tasks_lock:
             self._cleanup_stream_tasks_locked()
             self._stream_tasks[task.task_id] = task
@@ -357,6 +378,7 @@ class Fcitx5Backend:
                 and self._slm_polisher.should_polish(
                     text,
                     long_mode=True,
+                    min_chars=task.polish_min_chars or None,
                 )
             )
             if not should_polish:
@@ -374,7 +396,12 @@ class Fcitx5Backend:
             task.set_phase("polishing")
             task.add_event("status", "正在润色...")
             got_final = False
-            for event in self._slm_polisher.stream_polish(text, long_mode=True):
+            for event in self._slm_polisher.stream_polish(
+                text,
+                long_mode=True,
+                min_chars=task.polish_min_chars or None,
+                enable_thinking=task.enable_thinking,
+            ):
                 if task.is_cancelled():
                     return
 
@@ -449,7 +476,7 @@ class Fcitx5Backend:
            -> {"success": true, "text": "识别结果"}
 
         1b. transcribe_start: 异步语音识别/润色任务
-           {"type": "transcribe_start", "audio_path": "/tmp/xxx.wav", "long_mode": true}
+           {"type": "transcribe_start", "audio_path": "/tmp/xxx.wav", "long_mode": true, "polish_min_chars": 16, "polish_timeout_ms": 12000, "enable_thinking": false}
            -> {"success": true, "task_id": "...", "status": "running"}
 
         1c. polish_poll: 拉取异步任务事件
@@ -500,10 +527,23 @@ class Fcitx5Backend:
             if req_type == 'transcribe_start':
                 audio_path = request.get('audio_path')
                 long_mode = bool(request.get('long_mode', False))
+                polish_min_chars = int(request.get("polish_min_chars", 0) or 0)
+                polish_timeout_ms = int(request.get("polish_timeout_ms", 0) or 0)
+                enable_thinking = (
+                    bool(request["enable_thinking"])
+                    if "enable_thinking" in request
+                    else None
+                )
                 if not audio_path:
                     response = {"success": False, "error": "缺少 audio_path 参数"}
                 else:
-                    task = self._start_stream_task(str(audio_path), long_mode)
+                    task = self._start_stream_task(
+                        str(audio_path),
+                        long_mode,
+                        polish_min_chars,
+                        polish_timeout_ms,
+                        enable_thinking,
+                    )
                     response = {
                         "success": True,
                         "task_id": task.task_id,

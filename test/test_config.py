@@ -79,7 +79,6 @@ def test_load_config_accepts_user_remote_slm_shape(
                     "model": "deepseek/deepseek-v4-flash",
                     "timeout_ms": 8000,
                     "min_chars": 8,
-                    "max_tokens": 512,
                     "enable_thinking": False,
                     "api_key": "${COMMON_LLM_API_KEY}",
                 }
@@ -95,7 +94,6 @@ def test_load_config_accepts_user_remote_slm_shape(
     assert config["slm"]["model"] == "deepseek/deepseek-v4-flash"
     assert config["slm"]["timeout_ms"] == 8000
     assert config["slm"]["min_chars"] == 8
-    assert config["slm"]["max_tokens"] == 512
     assert config["slm"]["enable_thinking"] is False
     assert config["slm"]["api_key"] == "secret-token"
     assert "local_model" not in config["slm"]

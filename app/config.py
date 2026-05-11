@@ -48,8 +48,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "stream_idle_timeout_ms": 12000,
         # 0 表示不额外设置 SDK 请求总超时，避免覆盖 idle timeout 语义
         "transport_timeout_ms": 0,
-        "min_chars": 8,
-        "max_tokens": 96,
+        "min_chars": 16,
         "temperature": 0.0,
         "top_p": 0.9,
         "api_key": "",

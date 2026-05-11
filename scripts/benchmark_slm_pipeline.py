@@ -185,7 +185,7 @@ class RunResult:
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="对比 ASR-only(F9) 与 ASR+SLM(Shift+F9) 的延迟与资源开销"
+        description="对比 ASR-only 与 ASR+SLM 润色的延迟与资源开销"
     )
     parser.add_argument(
         "inputs",
@@ -253,12 +253,6 @@ def _build_parser() -> argparse.ArgumentParser:
         help="触发 SLM 的最短字符数",
     )
     parser.add_argument(
-        "--slm-max-tokens",
-        type=int,
-        default=96,
-        help="SLM 输出 token 上限",
-    )
-    parser.add_argument(
         "--slm-temperature",
         type=float,
         default=0.0,
@@ -310,7 +304,6 @@ def _build_slm_config(args: argparse.Namespace) -> Dict[str, Any]:
         "model": args.slm_model,
         "timeout_ms": args.slm_timeout_ms,
         "min_chars": args.slm_min_chars,
-        "max_tokens": args.slm_max_tokens,
         "temperature": args.slm_temperature,
         "top_p": args.slm_top_p,
         "api_key": args.slm_api_key,

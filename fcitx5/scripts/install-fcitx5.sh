@@ -55,11 +55,6 @@ DEFAULT_UV_PYTHON="3.12"
 ENABLE_SLM=0
 SLM_ENDPOINT="http://127.0.0.1:18080/v1/chat/completions"
 SLM_MODEL="Qwen/Qwen3.5-0.8B"
-SLM_TIMEOUT_MS=12000
-SLM_STREAM_IDLE_TIMEOUT_MS=12000
-SLM_TRANSPORT_TIMEOUT_MS=0
-SLM_MIN_CHARS=8
-SLM_MAX_TOKENS=96
 SLM_API_KEY=""
 
 resolve_python_cmd() {
@@ -144,14 +139,9 @@ write_slm_config_json() {
     local enabled="$3"
     local endpoint="$4"
     local model="$5"
-    local timeout_ms="$6"
-    local stream_idle_timeout_ms="$7"
-    local transport_timeout_ms="$8"
-    local min_chars="$9"
-    local max_tokens="${10}"
-    local api_key="${11}"
+    local api_key="$6"
 
-    "$python_bin" - "$config_file" "$enabled" "$endpoint" "$model" "$timeout_ms" "$stream_idle_timeout_ms" "$transport_timeout_ms" "$min_chars" "$max_tokens" "$api_key" << 'PY'
+    "$python_bin" - "$config_file" "$enabled" "$endpoint" "$model" "$api_key" << 'PY'
 import json
 import os
 import sys
@@ -173,12 +163,7 @@ target = os.path.expanduser(sys.argv[1])
 enabled = bool(int(sys.argv[2]))
 endpoint = sys.argv[3]
 model = sys.argv[4]
-timeout_ms = int(sys.argv[5])
-stream_idle_timeout_ms = int(sys.argv[6])
-transport_timeout_ms = int(sys.argv[7])
-min_chars = int(sys.argv[8])
-max_tokens = int(sys.argv[9])
-api_key = sys.argv[10]
+api_key = sys.argv[5]
 
 cfg = load_json(target)
 slm = cfg.get("slm", {})
@@ -190,6 +175,12 @@ for obsolete_key in (
     "local_model",
     "local_python",
     "warmup_timeout_ms",
+    "timeout_ms",
+    "stream_idle_timeout_ms",
+    "transport_timeout_ms",
+    "min_chars",
+    "max_tokens",
+    "enable_thinking",
 ):
     slm.pop(obsolete_key, None)
 
@@ -198,11 +189,6 @@ slm.update(
         "enabled": enabled,
         "endpoint": endpoint,
         "model": model,
-        "timeout_ms": timeout_ms,
-        "stream_idle_timeout_ms": stream_idle_timeout_ms,
-        "transport_timeout_ms": transport_timeout_ms,
-        "min_chars": min_chars,
-        "max_tokens": max_tokens,
         "api_key": api_key,
     }
 )
@@ -249,6 +235,12 @@ for obsolete_key in (
     "local_model",
     "local_python",
     "warmup_timeout_ms",
+    "timeout_ms",
+    "stream_idle_timeout_ms",
+    "transport_timeout_ms",
+    "min_chars",
+    "max_tokens",
+    "enable_thinking",
 ):
     if obsolete_key in slm:
         slm.pop(obsolete_key, None)
@@ -350,9 +342,9 @@ if [ -f "$FCITX5_BACKEND_CONFIG" ]; then
     echo "将跳过 SLM 相关交互和配置写入，避免覆盖现有设置。"
     echo "如需调整，请手动编辑该文件。"
 else
-    echo "是否启用长句 SLM 润色（Shift+F9）？"
+    echo "是否启用 SLM / AI 润色能力？"
     echo "  [1] 不启用（默认）- 不调用大模型，保持最低资源占用"
-    echo "  [2] 启用 - 配置 SLM 润色"
+    echo "  [2] 启用 - 配置远程大模型润色"
     echo ""
     read -r -p "请输入选项 (默认 1): " SLM_CHOICE
     case "$SLM_CHOICE" in
@@ -364,12 +356,6 @@ else
             read -r -p "SLM 模型名 (默认 $SLM_MODEL): " SLM_MODEL_INPUT
             if [ -n "$SLM_MODEL_INPUT" ]; then
                 SLM_MODEL="$SLM_MODEL_INPUT"
-                SLM_LITELLM_MODEL="openai/$SLM_MODEL"
-            fi
-
-            read -r -p "LiteLLM 模型名 (默认 $SLM_LITELLM_MODEL): " SLM_LITELLM_MODEL_INPUT
-            if [ -n "$SLM_LITELLM_MODEL_INPUT" ]; then
-                SLM_LITELLM_MODEL="$SLM_LITELLM_MODEL_INPUT"
             fi
 
             read -r -p "SLM Endpoint (默认 $SLM_ENDPOINT): " SLM_ENDPOINT_INPUT
@@ -386,7 +372,7 @@ else
             ENABLE_SLM=0
             SLM_API_KEY=""
             echo ""
-            echo "已禁用 SLM 润色（Shift+F9 不会触发润色）。"
+            echo "已禁用 SLM 润色能力。"
             ;;
     esac
 fi
@@ -703,11 +689,6 @@ else
         "$ENABLE_SLM" \
         "$SLM_ENDPOINT" \
         "$SLM_MODEL" \
-        "$SLM_TIMEOUT_MS" \
-        "$SLM_STREAM_IDLE_TIMEOUT_MS" \
-        "$SLM_TRANSPORT_TIMEOUT_MS" \
-        "$SLM_MIN_CHARS" \
-        "$SLM_MAX_TOKENS" \
         "$SLM_API_KEY"
     echo "✓ 已写入配置: $FCITX5_BACKEND_CONFIG"
 fi
