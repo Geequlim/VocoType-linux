@@ -104,6 +104,10 @@ class SLMPolisher:
         self.enable_thinking = self._optional_bool(cfg.get("enable_thinking"))
         extra_body = cfg.get("extra_body", {})
         self.extra_body = dict(extra_body) if isinstance(extra_body, dict) else {}
+        extra_headers = cfg.get("extra_headers", cfg.get("headers", {}))
+        self.extra_headers = (
+            dict(extra_headers) if isinstance(extra_headers, dict) else {}
+        )
 
     def should_polish(
         self,
@@ -190,7 +194,11 @@ class SLMPolisher:
                 "message": self.format_failure_message("litellm_not_installed"),
             }
         except Exception as exc:  # noqa: BLE001
-            logger.warning("SLM LiteLLM stream failed: %s", exc)
+            logger.warning(
+                "SLM LiteLLM stream failed: %s%s",
+                exc,
+                self._exception_debug_suffix(exc),
+            )
             yield {
                 "kind": "error",
                 "reason": "request_error",
@@ -251,7 +259,25 @@ class SLMPolisher:
         extra_body = self._request_extra_body(enable_thinking=enable_thinking)
         if extra_body:
             kwargs["extra_body"] = extra_body
+        extra_headers = self._request_extra_headers()
+        if extra_headers:
+            kwargs["extra_headers"] = extra_headers
         return completion(**kwargs)
+
+    def _request_extra_headers(self) -> Dict[str, str]:
+        headers = {
+            str(key): str(value)
+            for key, value in self.extra_headers.items()
+            if str(key).strip() and str(value).strip()
+        }
+        api_base = self._remote_api_base().lower()
+        if "openrouter.ai" in api_base:
+            headers.setdefault(
+                "HTTP-Referer",
+                "https://github.com/geequlim/VocoType-linux",
+            )
+            headers.setdefault("X-Title", "VoCoType")
+        return headers
 
     def _request_extra_body(
         self,
@@ -332,6 +358,35 @@ class SLMPolisher:
         if len(detail) > 240:
             detail = f"{detail[:237]}..."
         return f"SLM 调用失败：{detail}"
+
+    @staticmethod
+    def _exception_debug_suffix(exc: BaseException) -> str:
+        parts: list[str] = []
+        for attr in ("status_code", "llm_provider", "model"):
+            value = getattr(exc, attr, None)
+            if value is not None:
+                parts.append(f"{attr}={value}")
+
+        response = getattr(exc, "response", None)
+        response_text = ""
+        if response is not None:
+            status_code = getattr(response, "status_code", None)
+            if status_code is not None and not any(
+                part.startswith("status_code=") for part in parts
+            ):
+                parts.append(f"status_code={status_code}")
+            text_value = getattr(response, "text", None)
+            if isinstance(text_value, str):
+                response_text = text_value
+
+        if response_text:
+            compact = " ".join(response_text.strip().split())
+            if compact:
+                if len(compact) > 240:
+                    compact = f"{compact[:237]}..."
+                parts.append(f"response={compact}")
+
+        return f" ({', '.join(parts)})" if parts else ""
 
     @staticmethod
     def _normalize_remote_endpoint(endpoint: str) -> str:

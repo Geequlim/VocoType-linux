@@ -192,6 +192,38 @@ def test_openrouter_enable_thinking_false_maps_to_reasoning_extra_body():
     }
 
 
+def test_openrouter_adds_default_extra_headers():
+    polisher = SLMPolisher(
+        {
+            "enabled": True,
+            "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+        }
+    )
+
+    assert polisher._request_extra_headers() == {
+        "HTTP-Referer": "https://github.com/geequlim/VocoType-linux",
+        "X-Title": "VoCoType",
+    }
+
+
+def test_extra_headers_override_openrouter_defaults():
+    polisher = SLMPolisher(
+        {
+            "enabled": True,
+            "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+            "extra_headers": {
+                "HTTP-Referer": "https://example.test/app",
+                "X-Title": "Custom App",
+            },
+        }
+    )
+
+    assert polisher._request_extra_headers() == {
+        "HTTP-Referer": "https://example.test/app",
+        "X-Title": "Custom App",
+    }
+
+
 def test_enable_thinking_request_override_takes_precedence():
     polisher = SLMPolisher(
         {
@@ -229,6 +261,10 @@ def test_create_litellm_stream_does_not_send_max_tokens(monkeypatch):
 
     assert list(polisher._create_litellm_stream("原始文本")) == []
     assert "max_tokens" not in captured
+    assert captured["extra_headers"] == {
+        "HTTP-Referer": "https://github.com/geequlim/VocoType-linux",
+        "X-Title": "VoCoType",
+    }
 
 
 def test_extract_stream_delta_accepts_message_content():
