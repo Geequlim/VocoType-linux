@@ -40,7 +40,11 @@ fcitx5 -r
 2. 构建并安装 `fcitx5` addon
 3. 安装 Python 后端
 4. 配置音频设备
-5. 可选写入 Rime 和 SLM 配置
+5. 可选写入 Rime、SLM 和后端环境配置
+
+安装脚本会把当前终端检测到的 `http_proxy` / `https_proxy` / `all_proxy` 写入后台
+systemd 服务文件。国内网络环境下如使用代理访问 OpenRouter，建议确认安装时终端里已有
+这些代理变量。
 
 安装完成后，在 `fcitx5-configtool` 中添加 `VoCoType` 输入法。
 

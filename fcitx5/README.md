@@ -136,12 +136,15 @@ Fcitx 5 会把 addon 配置写到：
     "enabled": true,
     "endpoint": "http://127.0.0.1:18080/v1/chat/completions",
     "model": "Qwen/Qwen3.5-0.8B",
-    "api_key": "${COMMON_LLM_API_KEY}"
+    "api_key": "your-api-key"
   }
 }
 ```
 
 SLM 统一通过 `litellm` 读取 OpenAI-compatible 流式输出。
+安装脚本会检测当前终端里的 `http_proxy` / `https_proxy` / `all_proxy`，并写入生成的
+`vocotype-fcitx5-backend.service`。国内网络环境下，如果桌面客户端能访问 OpenRouter
+但后台服务失败，请优先检查 systemd 用户服务里是否带有代理环境变量。
 默认会把 `model` 转成 `openai/<model>` 交给 `litellm`；只有需要显式指定
 LiteLLM provider 时，才需要额外写 `litellm_model`。
 `max_tokens` 不再默认传给大模型，避免长文本润色被固定输出上限截断。

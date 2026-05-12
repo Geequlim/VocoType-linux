@@ -56,6 +56,10 @@ ENABLE_SLM=0
 SLM_ENDPOINT="http://127.0.0.1:18080/v1/chat/completions"
 SLM_MODEL="Qwen/Qwen3.5-0.8B"
 SLM_API_KEY=""
+DETECTED_HTTP_PROXY="${http_proxy:-${HTTP_PROXY:-}}"
+DETECTED_HTTPS_PROXY="${https_proxy:-${HTTPS_PROXY:-}}"
+DETECTED_ALL_PROXY="${all_proxy:-${ALL_PROXY:-}}"
+DETECTED_NO_PROXY="${no_proxy:-${NO_PROXY:-localhost,127.0.0.1,::1}}"
 
 resolve_python_cmd() {
     local py="$1"
@@ -78,6 +82,48 @@ escape_sed_replacement() {
     value=${value//\\/\\\\}
     value=${value//&/\\&}
     printf '%s' "$value"
+}
+
+escape_systemd_env_value() {
+    local value="$1"
+    value=${value//\\/\\\\}
+    value=${value//\"/\\\"}
+    value=${value//%/%%}
+    printf '%s' "$value"
+}
+
+write_systemd_environment_line() {
+    local service_file="$1"
+    local key="$2"
+    local value="$3"
+
+    [ -n "$value" ] || return 0
+    printf 'Environment="%s=%s"\n' "$key" "$(escape_systemd_env_value "$value")" >> "$service_file"
+}
+
+append_proxy_environment_lines() {
+    local service_file="$1"
+    local has_proxy=0
+
+    if [ -n "$DETECTED_HTTP_PROXY" ]; then
+        write_systemd_environment_line "$service_file" "http_proxy" "$DETECTED_HTTP_PROXY"
+        write_systemd_environment_line "$service_file" "HTTP_PROXY" "$DETECTED_HTTP_PROXY"
+        has_proxy=1
+    fi
+    if [ -n "$DETECTED_HTTPS_PROXY" ]; then
+        write_systemd_environment_line "$service_file" "https_proxy" "$DETECTED_HTTPS_PROXY"
+        write_systemd_environment_line "$service_file" "HTTPS_PROXY" "$DETECTED_HTTPS_PROXY"
+        has_proxy=1
+    fi
+    if [ -n "$DETECTED_ALL_PROXY" ]; then
+        write_systemd_environment_line "$service_file" "all_proxy" "$DETECTED_ALL_PROXY"
+        write_systemd_environment_line "$service_file" "ALL_PROXY" "$DETECTED_ALL_PROXY"
+        has_proxy=1
+    fi
+    if [ "$has_proxy" = "1" ] && [ -n "$DETECTED_NO_PROXY" ]; then
+        write_systemd_environment_line "$service_file" "no_proxy" "$DETECTED_NO_PROXY"
+        write_systemd_environment_line "$service_file" "NO_PROXY" "$DETECTED_NO_PROXY"
+    fi
 }
 
 get_python_version() {
@@ -963,7 +1009,8 @@ chmod +x "$HOME/.local/bin/vocotype-fcitx5-backend"
 
 # 创建 systemd 用户服务
 mkdir -p "$HOME/.config/systemd/user"
-cat > "$HOME/.config/systemd/user/vocotype-fcitx5-backend.service" << EOF
+BACKEND_SERVICE_FILE="$HOME/.config/systemd/user/vocotype-fcitx5-backend.service"
+cat > "$BACKEND_SERVICE_FILE" << EOF
 [Unit]
 Description=VoCoType Fcitx5 Backend Service
 After=graphical-session.target
@@ -975,6 +1022,11 @@ ExecStart=$HOME/.local/bin/vocotype-fcitx5-backend
 Restart=always
 RestartSec=5s
 Environment="PYTHONIOENCODING=UTF-8"
+EOF
+
+append_proxy_environment_lines "$BACKEND_SERVICE_FILE"
+
+cat >> "$BACKEND_SERVICE_FILE" << EOF
 
 [Install]
 WantedBy=default.target
@@ -983,6 +1035,9 @@ EOF
 start_or_restart_backend_service
 
 echo "✓ 后台服务启动器已创建"
+if [ -n "$DETECTED_HTTP_PROXY$DETECTED_HTTPS_PROXY$DETECTED_ALL_PROXY" ]; then
+    echo "✓ 已将当前终端检测到的代理环境写入后台服务"
+fi
 if [ "$PYTHON" = "$PROJECT_DIR/.venv/bin/python" ]; then
     echo "⚠️  当前选择的是项目虚拟环境。若重命名或删除仓库目录，需要重新安装或改用选项 2/3/4。"
 fi
