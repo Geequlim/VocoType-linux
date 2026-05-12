@@ -126,6 +126,7 @@ private:
                           fcitx::KeyStates states);
     bool handlePendingFallbackKey(fcitx::InputContext* ic, fcitx::KeySym keyval,
                                   fcitx::KeyStates states, bool is_release);
+    void commitFallbackText(fcitx::InputContext* ic, const std::string& text);
     bool isBareShiftToggleKey(fcitx::KeySym keyval, fcitx::KeyStates states) const;
     void cancelShiftToggle();
     void updateRawCompositionBuffer(fcitx::KeySym keyval, fcitx::KeyStates states,

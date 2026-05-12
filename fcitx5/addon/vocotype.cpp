@@ -22,6 +22,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <cerrno>
+#include <functional>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -74,10 +75,18 @@ constexpr std::array<const char *, 8> POLISHING_ANIMATION_FRAMES = {
 
 class CommitCandidateWord final : public fcitx::CandidateWord {
 public:
-    explicit CommitCandidateWord(std::string text)
-        : fcitx::CandidateWord(fcitx::Text(text)), text_(std::move(text)) {}
+    using CommitHandler =
+        std::function<void(fcitx::InputContext*, const std::string&)>;
+
+    explicit CommitCandidateWord(std::string text, CommitHandler handler = {})
+        : fcitx::CandidateWord(fcitx::Text(text)), text_(std::move(text)),
+          handler_(std::move(handler)) {}
 
     void select(fcitx::InputContext *inputContext) const override {
+        if (handler_) {
+            handler_(inputContext, text_);
+            return;
+        }
         auto &inputPanel = inputContext->inputPanel();
         inputPanel.reset();
         inputPanel.setClientPreedit(fcitx::Text());
@@ -88,7 +97,14 @@ public:
 
 private:
     std::string text_;
+    CommitHandler handler_;
 };
+
+bool isFallbackCommitKey(fcitx::KeySym keyval) {
+    return keyval == FcitxKey_1 || keyval == FcitxKey_KP_1 ||
+           keyval == FcitxKey_space || keyval == FcitxKey_KP_Space ||
+           keyval == FcitxKey_Return || keyval == FcitxKey_KP_Enter;
+}
 
 std::string toLower(std::string value) {
     std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
@@ -448,32 +464,47 @@ bool VoCoTypeAddon::handlePendingFallbackKey(fcitx::InputContext* ic,
     }
 
     if (is_release) {
-        return keyval == FcitxKey_1 || keyval == FcitxKey_space ||
-               keyval == FcitxKey_Return || keyval == FcitxKey_KP_Enter ||
-               keyval == FcitxKey_Escape;
+        return true;
     }
 
     const bool has_modifier = (states & fcitx::KeyState::Ctrl) ||
                               (states & fcitx::KeyState::Alt) ||
                               (states & fcitx::KeyState::Super);
-    if (!has_modifier &&
-        (keyval == FcitxKey_1 || keyval == FcitxKey_space ||
-         keyval == FcitxKey_Return || keyval == FcitxKey_KP_Enter)) {
+    if (!has_modifier && isFallbackCommitKey(keyval)) {
         std::string text = pending_fallback_text_;
-        pending_fallback_text_.clear();
-        commitText(ic, text);
+        commitFallbackText(ic, text);
         return true;
     }
 
-    if (keyval == FcitxKey_Escape) {
+    if (!has_modifier && keyval == FcitxKey_Escape) {
         pending_fallback_text_.clear();
         clearUI(ic);
         return true;
     }
 
-    pending_fallback_text_.clear();
+    return true;
+}
+
+void VoCoTypeAddon::commitFallbackText(fcitx::InputContext* ic,
+                                       const std::string& text) {
+    if (!ic || text.empty()) {
+        pending_fallback_text_.clear();
+        return;
+    }
+
+    clearRawCompositionBuffer();
     clearUI(ic);
-    return false;
+    ic->commitString(text);
+
+    const uint64_t now = fcitx::now(CLOCK_MONOTONIC);
+    last_committed_ic_ = ic;
+    last_committed_program_ = ic->program();
+    last_committed_frontend_ = std::string(ic->frontendName());
+    last_committed_text_ = text;
+    last_commit_time_us_ = now;
+    FCITX_INFO() << "Committed fallback text: program=" << last_committed_program_
+                 << ", frontend=" << last_committed_frontend_
+                 << ", text=" << text;
 }
 
 bool VoCoTypeAddon::isBareShiftToggleKey(fcitx::KeySym keyval,
@@ -1485,7 +1516,7 @@ void VoCoTypeAddon::showError(fcitx::InputContext* ic, const std::string& error,
     stopRecordingAnimation();
 
     if (!original_text.empty()) {
-    pending_fallback_text_ = original_text;
+        pending_fallback_text_ = original_text;
         auto& inputPanel = ic->inputPanel();
         fcitx::Text panel_text;
         panel_text.append("❌ " + error);
@@ -1501,7 +1532,12 @@ void VoCoTypeAddon::showError(fcitx::InputContext* ic, const std::string& error,
         candidateList->setCursorPositionAfterPaging(
             fcitx::CursorPositionAfterPaging::ResetToFirst);
         candidateList->setSelectionKey({fcitx::Key(FcitxKey_1)});
-        candidateList->append<CommitCandidateWord>(original_text);
+        candidateList->append<CommitCandidateWord>(
+            original_text,
+            [this](fcitx::InputContext* input_context,
+                   const std::string& text) {
+                commitFallbackText(input_context, text);
+            });
         candidateList->setGlobalCursorIndex(0);
         inputPanel.setCandidateList(std::move(candidateList));
 
